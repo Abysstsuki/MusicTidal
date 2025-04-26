@@ -6,7 +6,7 @@ import { IconButton, Slider } from '@mui/material';
 import { PauseRounded, PlayArrowRounded, FastForwardRounded, FastRewindRounded, VolumeUpRounded, VolumeDownRounded } from '@mui/icons-material';
 
 export default function MusicPlayer() {
-    const duration = 200;
+    const duration = 500;
     const [position, setPosition] = useState(32);
     const [paused, setPaused] = useState(false);
 
@@ -18,7 +18,7 @@ export default function MusicPlayer() {
 
     return (
         <div className="w-full p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-80 max-w-full mx-auto relative z-10">
+            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full w-110 max-w-full mx-auto relative z-10">
                 <div className="flex items-center">
                     <div className="w-24 h-24 overflow-hidden flex-shrink-0 rounded-lg bg-gray-200">
                         <img alt="can't win - Chilling Sunday" src="/static/background.jpg" className="w-full h-full object-cover" />
