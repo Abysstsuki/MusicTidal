@@ -47,7 +47,7 @@ function parseLyric(lyric: string) {
 
 export default function MusicLyrics() {
     const lyrics = parseLyric(rawLyric);
-    const [position, setPosition] = useState(67);
+    const [position, setPosition] = useState(-1);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -56,6 +56,16 @@ export default function MusicLyrics() {
         const next = lyrics[index + 1];
         return position >= line.time && (!next || position < next.time);
     });
+
+    //歌词动态滚动测试
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setPosition(prev => prev + 0.5); // 每 500ms 播放 0.5 秒（可以调速度）
+        }, 500); // 每 500 毫秒更新一次
+
+        return () => clearInterval(interval); // 组件卸载时清理
+    }, []);
+
 
     // 用户滚动时，记录下来
     const handleScroll = () => {
@@ -90,8 +100,8 @@ export default function MusicLyrics() {
     }, [currentIndex, isUserScrolling]);
 
     return (
-        <div className="w-full p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-132 w-160 max-w-full mx-auto relative z-10 py-10">
+        <div className="flex h-full w-full p-3 relative overflow-hidden">
+            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-160 max-w-full mx-auto relative z-10 py-10">
                 <SimpleBar style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
                     <div className="flex flex-col items-center space-y-10" ref={containerRef}>
                         {lyrics.map((line, index) => (
@@ -99,8 +109,8 @@ export default function MusicLyrics() {
                                 key={index}
                                 data-idx={index}
                                 className={`transition-all duration-300 ${index === currentIndex
-                                        ? 'text-white text-xl font-bold opacity-100 scale-110'
-                                        : 'text-white text-lg opacity-60'
+                                    ? 'text-white text-xl font-bold opacity-100 scale-110'
+                                    : 'text-white text-lg opacity-60'
                                     } max-w-full w-[90%] text-center break-words`}
                             >
                                 {line.text || '...'}
