@@ -1,9 +1,7 @@
-'use client';
-
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
+import OnlineUserItem from './modelItem/OnlineUserItem';
 
-// 模拟用户数据
 const mockUsers = [
     { id: 'Abyss' },
     { id: 'ShelAv' },
@@ -34,26 +32,22 @@ export default function OnlineUser() {
 
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
-            <div className="flex-col w-full h-full bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 space-y-4 rounded-lg overflow-y-auto">
-                <h2 className="text-white text-lg font-semibold">在线用户</h2>
-                <AnimatePresence>
-                    {onlineUsers.map((user) => (
-                        <motion.div
-                            key={user.id}
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
-                            transition={{ duration: 0.3 }}
-                            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-white font-medium text-sm"
-                        >
-                            {user.id}
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+            <div className="w-full h-full bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg overflow-y-auto">
+                <h2 className="text-white text-lg font-semibold mb-2">在线用户</h2>
+
+                <div className="flex flex-wrap gap-2">
+                    <AnimatePresence>
+                        {onlineUsers.map((user) => (
+                            <OnlineUserItem key={user.id} id={user.id} />
+                        ))}
+                    </AnimatePresence>
+                </div>
+
                 {onlineUsers.length === 0 && (
-                    <p className="text-white/60 italic text-sm">暂无在线用户</p>
+                    <p className="text-white/60 italic text-sm mt-4">暂无在线用户</p>
                 )}
             </div>
         </div>
     );
 }
+

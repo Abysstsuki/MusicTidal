@@ -5,10 +5,12 @@ import { Button } from '@mui/material';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LoginIcon from '@mui/icons-material/Login';
+import AuthModal from './authmodal';
 
 export default function UserInfo() {
+    const [showAuthModal, setShowAuthModal] = useState(false);
     const [user, setUser] = useState({
-        isLoggedIn: true,
+        isLoggedIn: false,
         name: 'AbyssTsuki',
         isPlaylistBound: false,
     });
@@ -59,13 +61,18 @@ export default function UserInfo() {
                             variant="contained"
                             startIcon={<LoginIcon />}
                             color="primary"
-                            onClick={() => alert('登录 / 注册')}
+                            onClick={() => setShowAuthModal(true)} // 控制显示
                         >
                             登录 / 注册
                         </Button>
                     )}
                 </div>
             </div>
+            {showAuthModal && (
+                <div className="absolute inset-0 z-50">
+                    <AuthModal onClose={() => setShowAuthModal(false)} />
+                </div>
+            )}
         </div>
     );
 }

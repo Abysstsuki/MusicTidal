@@ -6,6 +6,7 @@ import { IconButton, Slider } from '@mui/material';
 import { RefreshRounded, FastForwardRounded, DownloadRounded, VolumeUpRounded, VolumeDownRounded } from '@mui/icons-material';
 
 export default function MusicPlayer() {
+    const user = 'Abyss';
     const duration = 500;
     const [position, setPosition] = useState(1);
 
@@ -24,8 +25,8 @@ export default function MusicPlayer() {
                         <img alt="music cover" src="/static/background.jpg" className="w-full h-full object-cover" />
                     </div>
                     <div className="ml-6 min-w-0">
-                        <p className="text-sm text-gray-500 font-medium">Jun Pulse</p>
-                        <p className="truncate font-bold">123123123</p>
+                        <p className="text-2xl text-gray-500 font-medium">由 {user} 点歌</p>
+                        <p className="truncate font-bold">I Love you so</p>
                         <p className="truncate text-sm tracking-tight">Chilling Sunday — 123123123</p>
                     </div>
                 </div>
