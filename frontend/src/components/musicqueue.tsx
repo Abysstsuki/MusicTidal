@@ -9,19 +9,19 @@ import { Song } from '@/types/music';
 export default function MusicQueue() {
     const [queue, setQueue] = useState<Song[]>([
         {
-            cover: 'https://p2.music.126.net/_GUlHlmOTXK2GzG7Zbk_Cg==/109951163566164701.jpg',
+            cover: '/static/background.jpg',
             title: '海阔天空',
             artist: 'Beyond',
             duration: '05:32',
         },
         {
-            cover: 'https://p1.music.126.net/Xp0X8TbhFS90ZRxhCz5N5A==/109951164271152539.jpg',
+            cover: '/static/background.jpg',
             title: '稻香',
             artist: '周杰伦',
             duration: '03:42',
         },
         {
-            cover: 'https://p2.music.126.net/k6-bHLaYvxyaXK5QtuAnKg==/109951164020534000.jpg',
+            cover: '/static/background.jpg',
             title: '夜曲',
             artist: '周杰伦',
             duration: '04:48',
