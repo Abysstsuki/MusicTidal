@@ -14,11 +14,21 @@ export default function ChatBox() {
         { id: 'Bob', text: '歌曲测试1' },
     ]);
     const [input, setInput] = useState('');
+    const [username, setUsername] = useState<string | null>(null);
     const messageEndRef = useRef<HTMLDivElement>(null);
 
+    // 获取登录用户信息
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            setUsername(user.username); // 你应确保 user.username 存在
+        }
+    }, []);
+
     const handleSend = () => {
-        if (input.trim()) {
-            setMessages(prev => [...prev, { id: 'Me', text: input.trim() }]);
+        if (input.trim() && username) {
+            setMessages(prev => [...prev, { id: username, text: input.trim() }]);
             setInput('');
         }
     };
@@ -55,6 +65,7 @@ export default function ChatBox() {
                     <button
                         onClick={handleSend}
                         className="px-4 py-2 bg-white/20 text-white rounded hover:bg-white/30 transition-all"
+                        disabled={!username}
                     >
                         发送
                     </button>

@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react';
 
 interface AuthModalProps {
     onClose: () => void;
+    onLoginSuccess?: (username: string, token: string) => void;
 }
 
-export default function AuthModal({ onClose }: AuthModalProps) {
+export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
     const [show, setShow] = useState(false);
     const [isRegister, setIsRegister] = useState(false);
     const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
@@ -18,11 +20,17 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         return () => clearTimeout(timer);
     }, []);
 
-    // 表单提交逻辑（登录或注册）
-    const handleSubmit = () => {
-        if (!username || !password) {
-            setError('请填写用户名和密码');
-            return;
+    const handleSubmit = async () => {
+        if (isRegister) {
+            if (!username || !email || !password) {
+                setError('请填写所有注册信息');
+                return;
+            }
+        } else {
+            if (!email || !password) {
+                setError('请填写邮箱和密码');
+                return;
+            }
         }
 
         if (password.length < 6) {
@@ -30,28 +38,64 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             return;
         }
 
-        // 可扩展邮箱、特殊字符验证等
         setError('');
-        if (isRegister) {
-            alert(`注册成功：${username}`);
-        } else {
-            alert(`登录成功：${username}`);
+
+        try {
+            const payload = isRegister
+                ? { username, email, password }
+                : { email, password };
+
+            const res = await fetch(`/api/auth/${isRegister ? 'register' : 'login'}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setError(data.error || '请求失败');
+                return;
+            }
+
+            // 登录时存 token 并通知父组件
+            // 只改登录相关部分，省略其他代码
+
+            if (!isRegister) {
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    console.log('登录成功，token已存储:', data.token);
+                } else {
+                    console.warn('登录成功，但未返回 token');
+                }
+
+                // 注意：从后端返回的 user 对象里取用户名
+                const username = data.user?.username || email;
+                if (onLoginSuccess) {
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    onLoginSuccess(data.user.username, data.token);
+                }
+            }
+
+
+            alert(`${isRegister ? '注册' : '登录'}成功：${data.username || username || email}`);
+            location.reload();
+            onClose();
+        } catch (error) {
+            setError('网络错误，请稍后重试');
         }
-        onClose();
     };
 
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-            onClick={onClose} // 点击遮罩关闭
+            onClick={onClose}
         >
             <div
-                className={`bg-[rgba(255,255,255,0.2)] backdrop-blur-lg rounded-lg p-6 w-[26rem] max-w-full transition-all duration-300 ${
-                    show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                }`}
-                onClick={(e) => e.stopPropagation()} // 阻止点击冒泡
+                className={`bg-[rgba(255,255,255,0.2)] backdrop-blur-lg rounded-lg p-6 w-[26rem] max-w-full transition-all duration-300 ${show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                    }`}
+                onClick={(e) => e.stopPropagation()}
             >
-                {/* 关闭按钮 */}
                 <div className="flex justify-end">
                     <button
                         onClick={onClose}
@@ -61,22 +105,31 @@ export default function AuthModal({ onClose }: AuthModalProps) {
                     </button>
                 </div>
 
-                {/* 登录 / 注册表单 */}
                 <div className="space-y-4 mt-2 text-white text-sm">
                     <div className="text-2xl font-semibold text-center">
                         {isRegister ? '注册' : '登录'}
                     </div>
 
+                    {isRegister && (
+                        <input
+                            className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
+                            placeholder="昵称"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                        />
+                    )}
+
                     <input
                         className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
-                        placeholder="用户名"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="邮箱"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                     />
 
                     <input
                         className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
-                        placeholder="密码（至少6位）"
+                        placeholder="密码"
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}

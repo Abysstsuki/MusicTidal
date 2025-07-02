@@ -1,10 +1,9 @@
-// src/routes/userRoutes.ts
-import { Router } from 'express';
+import express from 'express';
+import { getUserProfile } from '../controllers/userController';
+import { authenticateToken } from '../middlewares/authMiddleware';
 
-const router = Router();
+const router = express.Router();
 
-router.get('/test', (req, res) => {
-  res.send('User route is working!');
-});
+router.get('/me', authenticateToken, getUserProfile);
 
 export default router;

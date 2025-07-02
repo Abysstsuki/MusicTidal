@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button, Stack } from '@mui/material';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
@@ -10,15 +10,64 @@ import AuthModal from './authmodal';
 import MusicRequestModal from './musicreq';
 import BindPlaylistModal from './bindlist';
 
+interface User {
+    isLoggedIn: boolean;
+    name: string;
+    isPlaylistBound: boolean;
+}
+
 export default function UserInfo() {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [showRequestModal, setShowRequestModal] = useState(false);
     const [showBindModal, setShowBindModal] = useState(false);
-    const [user, setUser] = useState({
-        isLoggedIn: true,
-        name: 'AbyssTsuki',
+    const [user, setUser] = useState<User>({
+        isLoggedIn: false,
+        name: '',
         isPlaylistBound: false,
     });
+
+    // 页面刷新时尝试用 token 恢复用户信息
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        console.log(token);
+        if (!token) return;
+
+        fetch('/api/user/me', {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('验证失败');
+                return res.json();
+            })
+            .then(data => {
+                setUser({
+                    isLoggedIn: true,
+                    name: data.username || data.email,
+                    isPlaylistBound: false,
+                });
+            })
+            .catch(err => {
+                console.error('自动登录失败:', err);
+                localStorage.removeItem('token');
+            });
+
+    }, []);
+
+    const handleLoginSuccess = (username: string, token: string) => {
+        localStorage.setItem('token', token);
+        setUser({ isLoggedIn: true, name: username, isPlaylistBound: false });
+        setShowAuthModal(false);
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser({ isLoggedIn: false, name: '', isPlaylistBound: false });
+        location.reload();
+    };
 
     const handleBindSuccess = () => {
         setUser({ ...user, isPlaylistBound: true });
@@ -86,7 +135,7 @@ export default function UserInfo() {
                             variant="contained"
                             startIcon={<LogoutIcon />}
                             color="error"
-                            onClick={() => setUser({ ...user, isLoggedIn: false })}
+                            onClick={handleLogout}
                         >
                             登出
                         </Button>
@@ -105,9 +154,16 @@ export default function UserInfo() {
 
             {showAuthModal && (
                 <div className="absolute inset-0 z-50">
-                    <AuthModal onClose={() => setShowAuthModal(false)} />
+                    <AuthModal
+                        onClose={() => setShowAuthModal(false)}
+                        // 修改这里，让 AuthModal 返回 token 和用户名
+                        onLoginSuccess={(username: string, token: string) =>
+                            handleLoginSuccess(username, token)
+                        }
+                    />
                 </div>
             )}
+
             {showRequestModal && (
                 <MusicRequestModal onClose={() => setShowRequestModal(false)} />
             )}
