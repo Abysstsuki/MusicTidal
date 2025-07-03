@@ -1,41 +1,95 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 type Message = {
-    id: string;
+    id: string; // 用户名
     text: string;
 };
 
 export default function ChatBox() {
-    const [messages, setMessages] = useState<Message[]>([
-        { id: 'User123', text: '歌曲测试1' },
-        { id: 'Alice', text: '歌曲测试1' },
-        { id: 'Bob', text: '歌曲测试1' },
-    ]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [username, setUsername] = useState<string | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
     const messageEndRef = useRef<HTMLDivElement>(null);
 
-    // 获取登录用户信息
+    // 从 localStorage 读取历史消息（仅10条）
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
             const user = JSON.parse(storedUser);
-            setUsername(user.username); // 你应确保 user.username 存在
+            setUsername(user.username);
+        }
+
+        const storedMessages = localStorage.getItem('chatMessages');
+        if (storedMessages) {
+            try {
+                const parsed = JSON.parse(storedMessages) as Message[];
+                setMessages(parsed);
+            } catch {}
         }
     }, []);
 
-    const handleSend = () => {
-        if (input.trim() && username) {
-            setMessages(prev => [...prev, { id: username, text: input.trim() }]);
-            setInput('');
-        }
-    };
+    // 建立 WebSocket 连接
+    useEffect(() => {
+        if (!username) return;
 
+        const ws = new WebSocket(`${WS_URL}`);
+
+
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'join', username }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'chat') {
+                    const newMsg: Message = { id: msg.username, text: msg.text };
+
+                    setMessages((prev) => {
+                        const updated = [...prev, newMsg];
+
+                        // 更新本地存储中的最近10条
+                        const last10 = updated.slice(-10);
+                        localStorage.setItem('chatMessages', JSON.stringify(last10));
+
+                        return updated;
+                    });
+                }
+            } catch (err) {
+                console.error('解析消息失败', err);
+            }
+        };
+
+        ws.onclose = () => {
+            ws.send(JSON.stringify({ type: 'leave', username }));
+        };
+
+        return () => {
+            ws.close();
+        };
+    }, [username]);
+
+    // 滚动到底部
     useEffect(() => {
         messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    const handleSend = () => {
+        if (input.trim() && username && wsRef.current?.readyState === WebSocket.OPEN) {
+            const msg = {
+                type: 'chat',
+                username,
+                text: input.trim(),
+            };
+            wsRef.current.send(JSON.stringify(msg));
+            setInput('');
+        }
+    };
 
     return (
         <div className="w-full h-full p-3 relative overflow-hidden">
@@ -51,7 +105,7 @@ export default function ChatBox() {
                     <div ref={messageEndRef} />
                 </div>
 
-                {/* 固定底部的输入区域 */}
+                {/* 底部输入区域 */}
                 <div className="mt-4 flex items-center space-x-2">
                     <input
                         value={input}

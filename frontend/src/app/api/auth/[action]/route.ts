@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export async function POST(request: NextRequest) {
   const action = request.nextUrl.pathname.split('/').pop(); // login or register

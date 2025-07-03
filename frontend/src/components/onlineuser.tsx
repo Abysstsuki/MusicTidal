@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import OnlineUserItem from './modelItem/OnlineUserItem';
-
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 type OnlineUser = { id: string };
 
 export default function OnlineUser() {
@@ -46,8 +46,7 @@ export default function OnlineUser() {
     // 当 username 有效时建立 WebSocket 连接
     useEffect(() => {
         if (!username) return;
-
-        const ws = new WebSocket('ws://localhost:3001');
+        const ws = new WebSocket(`${WS_URL}`);
         wsRef.current = ws;
 
         ws.onopen = () => {
