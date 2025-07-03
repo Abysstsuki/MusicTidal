@@ -9,24 +9,28 @@ import { Song } from '@/types/music';
 export default function MusicQueue() {
     const [queue, setQueue] = useState<Song[]>([
         {
-            cover: '/static/background.jpg',
-            title: '海阔天空',
+            id: 1,
+            name: '海阔天空',
             artist: 'Beyond',
-            duration: '05:32',
+            prcUrl: '/static/background.jpg',
+            duration: 332, // 05:32 -> 5*60 + 32
         },
         {
-            cover: '/static/background.jpg',
-            title: '稻香',
+            id: 2,
+            name: '稻香',
             artist: '周杰伦',
-            duration: '03:42',
+            prcUrl: '/static/background.jpg',
+            duration: 222, // 03:42
         },
         {
-            cover: '/static/background.jpg',
-            title: '夜曲',
+            id: 3,
+            name: '夜曲',
             artist: '周杰伦',
-            duration: '04:48',
+            prcUrl: '/static/background.jpg',
+            duration: 288, // 04:48
         },
     ]);
+
 
     const moveToTop = (index: number) => {
         if (index === 0) return;
@@ -47,10 +51,11 @@ export default function MusicQueue() {
             <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto space-y-3 text-white text-sm">
                 {queue.map((song, index) => (
                     <MusicItem
-                        key={index}
+                        id={song.id}
+                        key={song.id}
                         index={index}
-                        cover={song.cover}
-                        title={song.title}
+                        prcUrl={song.prcUrl}
+                        name={song.name}
                         artist={song.artist}
                         duration={song.duration}
                     >

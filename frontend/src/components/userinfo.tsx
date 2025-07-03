@@ -114,18 +114,6 @@ export default function UserInfo() {
                                 解除绑定
                             </Button>
                         )}
-                        <Button
-                            variant="outlined"
-                            startIcon={<LibraryMusicIcon />}
-                            onClick={() => setShowRequestModal(true)}
-                            sx={{
-                                color: '#fff',
-                                borderColor: '#fff',
-                                '&:hover': { borderColor: '#ccc' },
-                            }}
-                        >
-                            点歌
-                        </Button>
                     </Stack>
                 )}
 
@@ -164,9 +152,6 @@ export default function UserInfo() {
                 </div>
             )}
 
-            {showRequestModal && (
-                <MusicRequestModal onClose={() => setShowRequestModal(false)} />
-            )}
             {showBindModal && (
                 <BindPlaylistModal
                     onClose={() => setShowBindModal(false)}

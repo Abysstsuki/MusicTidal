@@ -9,8 +9,8 @@ interface MusicItemProps extends Song {
 }
 
 export default function MusicItem({
-    cover,
-    title,
+    prcUrl,
+    name,
     artist,
     duration,
     index,
@@ -23,13 +23,13 @@ export default function MusicItem({
             )}
 
             <img
-                src={cover}
-                alt={`${title} 封面`}
+                src={prcUrl}
+                alt={`${name} 封面`}
                 className="w-10 h-10 rounded object-cover"
             />
 
             <div className="flex flex-col flex-1 min-w-0">
-                <div className="text-white text-sm truncate">{title}</div>
+                <div className="text-white text-sm truncate">{name}</div>
                 <div className="text-white/60 text-xs truncate">{artist}</div>
             </div>
 
