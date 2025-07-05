@@ -1,3 +1,4 @@
+// services/websocketServer.ts
 import { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 
@@ -24,13 +25,11 @@ export function setupWebSocketServer(server: Server) {
                             onlineUsers.add(username);
                             broadcastOnlineUsers();
 
-                            // 给新用户推送最近聊天记录
-                            ws.send(
-                                JSON.stringify({
-                                    type: 'history',
-                                    messages: recentMessages,
-                                })
-                            );
+                            // 推送历史聊天记录
+                            ws.send(JSON.stringify({
+                                type: 'history',
+                                messages: recentMessages,
+                            }));
                         }
                         break;
 
@@ -43,7 +42,6 @@ export function setupWebSocketServer(server: Server) {
 
                     case 'chat':
                         if (message.username && message.text) {
-                            // 记录聊天消息，保证最近10条
                             if (recentMessages.length >= MAX_HISTORY) {
                                 recentMessages.shift();
                             }
@@ -52,12 +50,11 @@ export function setupWebSocketServer(server: Server) {
                                 text: message.text,
                             });
 
-                            const payload = JSON.stringify({
+                            broadcast(JSON.stringify({
                                 type: 'chat',
                                 username: message.username,
                                 text: message.text,
-                            });
-                            broadcastToAll(payload);
+                            }));
                         }
                         break;
 
@@ -84,6 +81,16 @@ export function setupWebSocketServer(server: Server) {
 function broadcastOnlineUsers() {
     const userList = Array.from(onlineUsers);
     const payload = JSON.stringify({ type: 'update', users: userList });
+    broadcast(payload);
+}
+
+/**
+ * 核心广播方法，用于对外发送任何类型消息
+ */
+export function broadcast(message: string | object) {
+    if (!wss) return;
+
+    const payload = typeof message === 'string' ? message : JSON.stringify(message);
 
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -93,12 +100,5 @@ function broadcastOnlineUsers() {
 }
 
 export function broadcastToAll(message: string) {
-    if (!wss) return;
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
+    broadcast(message);
 }
-
-export { wss }; // 如需更复杂控制（后续播放控制）

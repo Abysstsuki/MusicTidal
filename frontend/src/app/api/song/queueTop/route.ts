@@ -3,7 +3,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 export async function POST(req: NextRequest) {
     try {
         const { id } = await req.json();
-        const res = await fetch(`${BACKEND_URL}/api/queue/top`, {
+        const res = await fetch(`${BACKEND_URL}/api/queue/moveTop`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id }),

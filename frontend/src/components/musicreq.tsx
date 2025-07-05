@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import MusicItem from './modelItem/MusicItem';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 import type { Song, SongSearchResponse } from '@/types/music';
@@ -13,33 +14,16 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [songs, setSongs] = useState<Song[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(6);
 
     const listContainerRef = useRef<HTMLDivElement>(null);
-    const itemHeight = 70;
+    const contentRef = useRef<HTMLDivElement>(null);
+    const [visibleCount, setVisibleCount] = useState(0); // 当前页面可显示条数
 
-    useEffect(() => {
-        if (!isVisible) return;
-
-        const updateItemsPerPage = () => {
-            if (listContainerRef.current) {
-                const height = listContainerRef.current.offsetHeight;
-                const count = Math.floor(height / itemHeight);
-                setItemsPerPage(count > 2 ? count : 2);
-            }
-        };
-
-        updateItemsPerPage();
-        window.addEventListener('resize', updateItemsPerPage);
-        return () => window.removeEventListener('resize', updateItemsPerPage);
-    }, [isVisible]);
     const handleEnqueue = async (song: Song) => {
         try {
             const res = await fetch('/api/song/queueAdd', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ song }),
             });
 
@@ -56,10 +40,7 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
     };
 
     const handleSearch = async () => {
-        // 去除首尾空白字符后判断是否为空
-        if (!searchTerm.trim()) {
-            return; // 直接返回，不进行搜索
-        }
+        if (!searchTerm.trim()) return;
 
         try {
             const res = await fetch(`/api/song/search?keywords=${encodeURIComponent(searchTerm)}`);
@@ -67,6 +48,7 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
 
             if (data.success && Array.isArray(data.data)) {
                 setSongs(data.data);
+                setCurrentPage(1);  // 新搜索重置页码
             } else {
                 console.error('搜索结果格式不正确:', data);
                 setSongs([]);
@@ -75,15 +57,41 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
             console.error('搜索出错:', err);
             setSongs([]);
         } finally {
-            // 搜索完成后清空搜索框和关键词
             setSearchTerm('');
         }
     };
 
-    const totalPages = Math.ceil(songs.length / itemsPerPage) || 1;
+    // 监听容器和内容高度，动态计算当前页可显示条目数
+    useEffect(() => {
+        if (!isVisible) return;
+
+        const updateVisibleCount = () => {
+            const containerHeight = listContainerRef.current?.offsetHeight || 0;
+            const contentHeight = contentRef.current?.scrollHeight || 0;
+
+            // 假设单个条目高度接近 contentHeight / 当前显示条目数
+            // 为简单起见，估计条目高度或者根据实际渲染的条目数动态调整
+            if (contentRef.current && containerHeight) {
+                // 计算每条高度（contentHeight / rendered items）
+                const renderedCount = contentRef.current.children.length || 1;
+                const approxItemHeight = contentHeight / renderedCount;
+
+                // 容器最多能显示多少条
+                const maxItems = Math.floor(containerHeight / approxItemHeight);
+                setVisibleCount(maxItems > 0 ? maxItems : renderedCount);
+            }
+        };
+
+        updateVisibleCount();
+        window.addEventListener('resize', updateVisibleCount);
+        return () => window.removeEventListener('resize', updateVisibleCount);
+    }, [isVisible, songs, currentPage]);
+
+    // 计算分页总数（基于 visibleCount 动态分页）
+    const totalPages = visibleCount > 0 ? Math.ceil(songs.length / visibleCount) : 1;
     const currentSongs = songs.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
+        (currentPage - 1) * visibleCount,
+        currentPage * visibleCount
     );
 
     const goToPrev = () => currentPage > 1 && setCurrentPage(currentPage - 1);
@@ -112,40 +120,39 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                 {/* 列表容器 */}
                 <div className="flex-1 overflow-hidden" ref={listContainerRef}>
                     <SimpleBar style={{ maxHeight: '100%' }} autoHide={true}>
-                        <div className="space-y-3">
-                            {currentSongs.map((song) => (
-                                <div
+                        <div ref={contentRef} className="space-y-3">
+                            {currentSongs.map((song,index) => (
+                                <MusicItem
+                                    id={song.id}
                                     key={song.id}
-                                    className="p-3 bg-white/10 text-white rounded-md hover:bg-white/20 transition text-sm h-[70px] flex items-center justify-between"
+                                    index={index}
+                                    prcUrl={song.prcUrl}
+                                    name={song.name}
+                                    artist={song.artist}
+                                    duration={song.duration}
                                 >
-                                    <div className="flex items-center">
-                                        <img src={song.prcUrl} alt={song.name} className="w-12 h-12 rounded-md mr-3" />
-                                        <div>
-                                            <div className="font-semibold">{song.name}</div>
-                                            <div className="text-white/70 text-xs">{song.artist}</div>
-                                        </div>
-                                    </div>
                                     <button
                                         className="ml-4 px-3 py-1 rounded bg-white/30 text-xs hover:bg-white/50 transition"
                                         onClick={() => handleEnqueue(song)}
                                     >
                                         点歌
                                     </button>
-                                </div>
+                                </MusicItem>
                             ))}
                         </div>
                     </SimpleBar>
                 </div>
 
                 {/* 分页控制器 */}
-                <div className="mt-4 flex justify-center items-center space-x-4 text-sm text-white">
+                <div className="mb-2 flex justify-center items-center space-x-4 text-sm text-white">
                     <button
                         onClick={goToPrev}
                         disabled={currentPage === 1}
-                        className={`px-3 py-1 rounded-md transition ${currentPage === 1
-                            ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                            : 'bg-white/20 hover:bg-white/30'
-                            }`}
+                        className={`px-3 py-1 rounded-md transition ${
+                            currentPage === 1
+                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                                : 'bg-white/20 hover:bg-white/30'
+                        }`}
                     >
                         上一页
                     </button>
@@ -155,10 +162,11 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                     <button
                         onClick={goToNext}
                         disabled={currentPage === totalPages}
-                        className={`px-3 py-1 rounded-md transition ${currentPage === totalPages
-                            ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                            : 'bg-white/20 hover:bg-white/30'
-                            }`}
+                        className={`px-3 py-1 rounded-md transition ${
+                            currentPage === totalPages
+                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                                : 'bg-white/20 hover:bg-white/30'
+                        }`}
                     >
                         下一页
                     </button>

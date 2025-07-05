@@ -1,10 +1,12 @@
 import { Song } from '../types/song';
+import { broadcast } from './websocketServer';
 
 class SongQueueService {
   private queue: Song[] = [];
 
   enqueue(song: Song) {
     this.queue.push(song);
+    this.broadcastQueue();
     return song;
   }
 
@@ -22,10 +24,12 @@ class SongQueueService {
 
   clear() {
     this.queue = [];
+    this.broadcastQueue();
   }
 
   removeById(id: number) {
     this.queue = this.queue.filter((s) => s.id !== id);
+    this.broadcastQueue();
   }
 
   moveToTop(id: number) {
@@ -33,7 +37,12 @@ class SongQueueService {
     if (index > -1) {
       const [song] = this.queue.splice(index, 1);
       this.queue.unshift(song);
+      this.broadcastQueue();
     }
+  }
+
+  private broadcastQueue() {
+    broadcast({ type: 'QUEUE_UPDATED', payload: this.queue });
   }
 }
 

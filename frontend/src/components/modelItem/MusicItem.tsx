@@ -16,6 +16,14 @@ export default function MusicItem({
     index,
     children,
 }: MusicItemProps) {
+    // 将毫秒转换为 分:秒
+    const formatDuration = (ms: number): string => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
     return (
         <div className="flex items-center gap-3 bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all">
             {index !== undefined && (
@@ -33,7 +41,9 @@ export default function MusicItem({
                 <div className="text-white/60 text-xs truncate">{artist}</div>
             </div>
 
-            <div className="text-white/50 text-xs w-12 text-right">{duration}</div>
+            <div className="text-white/50 text-xs w-12 text-right">
+                {formatDuration(duration)}
+            </div>
 
             {children}
         </div>
