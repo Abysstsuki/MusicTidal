@@ -1,50 +1,53 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import MusicItem from './modelItem/MusicItem';
 import { Song } from '@/types/music';
 
 export default function MusicQueue() {
-    const [queue, setQueue] = useState<Song[]>([
-        {
-            id: 1,
-            name: '海阔天空',
-            artist: 'Beyond',
-            prcUrl: '/static/background.jpg',
-            duration: 332, // 05:32 -> 5*60 + 32
-        },
-        {
-            id: 2,
-            name: '稻香',
-            artist: '周杰伦',
-            prcUrl: '/static/background.jpg',
-            duration: 222, // 03:42
-        },
-        {
-            id: 3,
-            name: '夜曲',
-            artist: '周杰伦',
-            prcUrl: '/static/background.jpg',
-            duration: 288, // 04:48
-        },
-    ]);
+    const [queue, setQueue] = useState<Song[]>([]);
 
-
-    const moveToTop = (index: number) => {
-        if (index === 0) return;
-        const updated = [...queue];
-        const [song] = updated.splice(index, 1);
-        updated.unshift(song);
-        setQueue(updated);
+    const fetchQueue = async () => {
+        try {
+            const res = await fetch('/api/song/queueList');
+            const data = await res.json();
+            setQueue(data.queue);
+        } catch (err) {
+            console.error('获取队列失败', err);
+        }
     };
 
-    const removeFromQueue = (index: number) => {
-        const updated = [...queue];
-        updated.splice(index, 1);
-        setQueue(updated);
+    const moveToTop = async (id: number) => {
+        try {
+            await fetch('/api/song/queueTop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            fetchQueue(); // 刷新队列
+        } catch (err) {
+            console.error('置顶失败', err);
+        }
     };
+
+    const removeFromQueue = async (id: number) => {
+        try {
+            await fetch('/api/song/queueRemove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            fetchQueue(); // 刷新队列
+        } catch (err) {
+            console.error('删除失败', err);
+        }
+    };
+
+    useEffect(() => {
+        fetchQueue();
+    }, []);
 
     return (
         <div className="w-full h-full p-3 relative overflow-hidden">
@@ -62,14 +65,14 @@ export default function MusicQueue() {
                         <div className="flex items-center gap-2 ml-2">
                             <button
                                 title="置顶"
-                                onClick={() => moveToTop(index)}
+                                onClick={() => moveToTop(song.id)}
                                 className="text-white/50 hover:text-white transition-all"
                             >
                                 <ArrowUpwardIcon />
                             </button>
                             <button
                                 title="移除"
-                                onClick={() => removeFromQueue(index)}
+                                onClick={() => removeFromQueue(song.id)}
                                 className="text-white/50 hover:text-red-400 transition-all"
                             >
                                 <DeleteIcon />

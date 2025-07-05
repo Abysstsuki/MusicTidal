@@ -33,6 +33,27 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
         window.addEventListener('resize', updateItemsPerPage);
         return () => window.removeEventListener('resize', updateItemsPerPage);
     }, [isVisible]);
+    const handleEnqueue = async (song: Song) => {
+        try {
+            const res = await fetch('/api/song/queueAdd', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ song }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || '加入队列失败');
+            }
+
+            alert(`《${song.name}》已加入队列`);
+        } catch (err) {
+            console.error('点歌失败', err);
+            alert('点歌失败，请稍后重试');
+        }
+    };
 
     const handleSearch = async () => {
         // 去除首尾空白字符后判断是否为空
@@ -95,18 +116,23 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                             {currentSongs.map((song) => (
                                 <div
                                     key={song.id}
-                                    className="p-3 bg-white/10 text-white rounded-md hover:bg-white/20 transition text-sm h-[70px] flex items-center"
+                                    className="p-3 bg-white/10 text-white rounded-md hover:bg-white/20 transition text-sm h-[70px] flex items-center justify-between"
                                 >
-                                    <img src={song.prcUrl} alt={song.name} className="w-12 h-12 rounded-md mr-3" />
-                                    <div>
-                                        <div className="font-semibold">{song.name}</div>
-                                        <div className="text-white/70 text-xs">{song.artist}</div>
+                                    <div className="flex items-center">
+                                        <img src={song.prcUrl} alt={song.name} className="w-12 h-12 rounded-md mr-3" />
+                                        <div>
+                                            <div className="font-semibold">{song.name}</div>
+                                            <div className="text-white/70 text-xs">{song.artist}</div>
+                                        </div>
                                     </div>
+                                    <button
+                                        className="ml-4 px-3 py-1 rounded bg-white/30 text-xs hover:bg-white/50 transition"
+                                        onClick={() => handleEnqueue(song)}
+                                    >
+                                        点歌
+                                    </button>
                                 </div>
                             ))}
-                            {currentSongs.length === 0 && (
-                                <div className="text-white/60 text-center py-6">搜索歌曲</div>
-                            )}
                         </div>
                     </SimpleBar>
                 </div>
