@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { setupWebSocketServer } from './services/websocketServer';
 import { verifyCookie } from './utils/axiosNetease';
+import { songQueueService } from './services/songQueueService';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ async function startServer() {
 
   server.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
+    songQueueService.startNextSongIfIdle();
   });
 }
 

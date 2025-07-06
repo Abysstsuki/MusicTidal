@@ -61,6 +61,9 @@ export default function MusicQueue() {
         const data = JSON.parse(event.data);
         if (data.type === 'QUEUE_UPDATED') {
           setQueue(data.payload); // ✅ payload 已包含 instanceId
+        } else if (data.type === 'PLAY_SONG') {
+          // 当歌曲开始播放时，重新获取队列状态以同步显示
+          fetchQueue();
         }
       } catch (e) {
         console.error('解析 WebSocket 消息失败', e);
@@ -83,34 +86,40 @@ export default function MusicQueue() {
   return (
     <div className="w-full h-full p-3 relative overflow-hidden">
       <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto space-y-3 text-white text-sm">
-        {queue.map((song, index) => (
-          <MusicItem
-            id={song.id}
-            key={song.instanceId} // ✅ 唯一 key
-            index={index}
-            prcUrl={song.prcUrl}
-            name={song.name}
-            artist={song.artist}
-            duration={song.duration}
-          >
-            <div className="flex items-center gap-2 ml-2">
-              <button
-                title="置顶"
-                onClick={() => moveToTop(song.instanceId)}
-                className="text-white/50 hover:text-white transition-all"
-              >
-                <ArrowUpwardIcon />
-              </button>
-              <button
-                title="移除"
-                onClick={() => removeFromQueue(song.instanceId)}
-                className="text-white/50 hover:text-red-400 transition-all"
-              >
-                <DeleteIcon />
-              </button>
-            </div>
-          </MusicItem>
-        ))}
+        {queue.length === 0 ? (
+          <div className="p-6 rounded-lg text-center">
+            <p className="text-gray-400 text-lg">当前歌曲队列为空，请点歌</p>
+          </div>
+        ) : (
+          queue.map((song, index) => (
+            <MusicItem
+              id={song.id}
+              key={song.instanceId} // ✅ 唯一 key
+              index={index}
+              prcUrl={song.prcUrl}
+              name={song.name}
+              artist={song.artist}
+              duration={song.duration}
+            >
+              <div className="flex items-center gap-2 ml-2">
+                <button
+                  title="置顶"
+                  onClick={() => moveToTop(song.instanceId)}
+                  className="text-white/50 hover:text-white transition-all"
+                >
+                  <ArrowUpwardIcon />
+                </button>
+                <button
+                  title="移除"
+                  onClick={() => removeFromQueue(song.instanceId)}
+                  className="text-white/50 hover:text-red-400 transition-all"
+                >
+                  <DeleteIcon />
+                </button>
+              </div>
+            </MusicItem>
+          ))
+        )}
       </div>
     </div>
   );

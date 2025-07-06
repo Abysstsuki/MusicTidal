@@ -1,6 +1,7 @@
 // services/websocketServer.ts
 import { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { getSongPlayInfo } from '../services/netease/song.service';
 
 const onlineUsers = new Set<string>();
 const recentMessages: { username: string; text: string }[] = [];
@@ -8,11 +9,27 @@ const MAX_HISTORY = 25;
 
 let wss: WebSocketServer;
 
+// 当前正在播放的歌曲信息
+let currentSong: any = null;
+let currentStartTime: number = 0;
+
 export function setupWebSocketServer(server: Server) {
     wss = new WebSocketServer({ server });
 
     wss.on('connection', (ws: WebSocket) => {
         let username: string | undefined;
+
+        // 新连接：如果有正在播放的歌曲，推送当前播放状态
+        if (currentSong && currentStartTime) {
+            ws.send(JSON.stringify({
+                type: 'PLAY_SONG',
+                payload: {
+                    song: currentSong,
+                    url: currentSong.url,
+                    startTime: currentStartTime,
+                },
+            }));
+        }
 
         ws.on('message', (data) => {
             try {
@@ -50,11 +67,11 @@ export function setupWebSocketServer(server: Server) {
                                 text: message.text,
                             });
 
-                            broadcast(JSON.stringify({
+                            broadcast({
                                 type: 'chat',
                                 username: message.username,
                                 text: message.text,
-                            }));
+                            });
                         }
                         break;
 
@@ -74,24 +91,17 @@ export function setupWebSocketServer(server: Server) {
             }
         });
     });
-
     console.log('✅ WebSocket server initialized');
 }
 
 function broadcastOnlineUsers() {
     const userList = Array.from(onlineUsers);
-    const payload = JSON.stringify({ type: 'update', users: userList });
-    broadcast(payload);
+    broadcast({ type: 'update', users: userList });
 }
 
-/**
- * 核心广播方法，用于对外发送任何类型消息
- */
 export function broadcast(message: string | object) {
     if (!wss) return;
-
     const payload = typeof message === 'string' ? message : JSON.stringify(message);
-
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(payload);
@@ -99,6 +109,30 @@ export function broadcast(message: string | object) {
     });
 }
 
-export function broadcastToAll(message: string) {
+// 对外暴露：设置当前播放的歌曲并广播给所有客户端
+export async function setCurrentPlayingSong(song: any) {
+    const playInfo = await getSongPlayInfo(song.id); // 获取播放 URL 和其他信息
+    currentSong = {
+        id: song.id,
+        name: song.name,
+        artist: song.artist,
+        prcUrl: song.prcUrl,
+        duration: song.duration,
+        url: playInfo.url,
+    };
+
+    currentStartTime = Date.now();
+
+    broadcast({
+        type: 'PLAY_SONG',
+        payload: {
+            song: currentSong,
+            startTime: currentStartTime,
+        },
+    });
+}
+
+// 可供其他模块使用的广播函数
+export function broadcastToAll(message: string | object) {
     broadcast(message);
 }
