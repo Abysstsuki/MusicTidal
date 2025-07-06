@@ -32,25 +32,25 @@ export const getQueue = (_req: Request, res: Response) => {
 };
 
 export const removeFromQueueHandler = (req: Request, res: Response) => {
-    const { id } = req.body;
-    if (typeof id !== 'number') {
+    const { instanceId } = req.body;
+    if (typeof instanceId !== 'number') {
         res.status(400).json({ error: 'Invalid song id' })
         return;
     }
 
-    songQueueService.removeById(id);
+    songQueueService.removeById(instanceId);
     res.status(200).json({ success: true });
     return;
 };
 
 export const moveToTopHandler = (req: Request, res: Response) => {
-    const { id } = req.body;
-    if (typeof id !== 'number') {
+    const { instanceId } = req.body;
+    if (typeof instanceId !== 'number') {
         res.status(400).json({ error: 'Invalid song id' })
         return;
     }
 
-    songQueueService.moveToTop(id);
+    songQueueService.moveToTop(instanceId);
     res.status(200).json({ success: true });
     return;
 };

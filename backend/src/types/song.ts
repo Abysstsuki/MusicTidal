@@ -5,3 +5,6 @@ export interface Song {
   prcUrl: string;
   duration: number;
 }
+export interface SongWithInstance extends Song {
+  instanceId: number;
+}
