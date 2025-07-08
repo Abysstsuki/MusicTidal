@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IconButton, Slider } from '@mui/material';
 import { RefreshRounded, FastForwardRounded, DownloadRounded, VolumeUpRounded, VolumeDownRounded } from '@mui/icons-material';
 import { Song } from '@/types/music';
+import { useMusicContext } from '@/contexts/MusicContext';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 interface PlaySongMessage {
     type: 'PLAY_SONG';
@@ -16,10 +17,9 @@ interface PlaySongMessage {
 }
 
 export default function MusicPlayer() {
-    const [song, setSong] = useState<Song | null>(null);
+    const { currentSong, currentPosition, setCurrentSong, setCurrentPosition, setIsPlaying } = useMusicContext();
     const [url, setUrl] = useState<string>('');
     const [startTime, setStartTime] = useState<number>(0);
-    const [position, setPosition] = useState<number>(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -30,7 +30,8 @@ export default function MusicPlayer() {
             const data = await res.json();
             if (data.success && data.currentSong && data.currentSong.url) {
                 const { song, startTime, url } = data.currentSong;
-                setSong(song);
+                // 确保创建新的歌曲对象引用，触发组件重新渲染
+                setCurrentSong(song ? { ...song } : null);
                 setStartTime(startTime);
                 setUrl(url);
                 // 移除播放逻辑，由自动播放useEffect处理
@@ -58,7 +59,7 @@ export default function MusicPlayer() {
 
     // 下载歌曲按钮功能
     const handleDownloadSong = async () => {
-        if (!song || !url) {
+        if (!currentSong || !url) {
             console.warn('没有可下载的歌曲');
             return;
         }
@@ -69,7 +70,7 @@ export default function MusicPlayer() {
             const downloadUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = downloadUrl;
-            link.download = `${song.name} - ${song.artist}.mp3`;
+            link.download = `${currentSong.name} - ${currentSong.artist}.mp3`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -94,7 +95,9 @@ export default function MusicPlayer() {
             const data: PlaySongMessage = JSON.parse(event.data);
             if (data.type === 'PLAY_SONG') {
                 const { song, url, startTime } = data.payload;
-                setSong(song);
+                console.log('音乐播放器: 收到WebSocket消息，新歌曲:', song?.name, 'ID:', song?.id);
+                // 确保创建新的歌曲对象引用，触发组件重新渲染
+                setCurrentSong(song ? { ...song } : null);
                 setUrl(url);
                 setStartTime(startTime);
                 // 移除重复的播放逻辑，由自动播放useEffect处理
@@ -112,32 +115,43 @@ export default function MusicPlayer() {
     // 自动播放逻辑 - 监控状态变化并主动播放
     useEffect(() => {
         const audio = audioRef.current;
-        if (!audio || !url || !song) return;
+        if (!audio || !url || !currentSong) return;
 
         // 设置音频源
         audio.src = url;
         
         // 计算播放位置
         const delay = (Date.now() - startTime) / 1000;
-        audio.currentTime = Math.min(delay, song.duration / 1000);
+        audio.currentTime = Math.min(delay, currentSong.duration / 1000);
         
         // 主动检查并播放音频（类似旧组件的逻辑）
         if (audio.paused) {
-            audio.play().catch((err) => {
+            audio.play().then(() => {
+                setIsPlaying(true);
+            }).catch((err) => {
                 if (err.name !== 'NotAllowedError') {
                     console.warn('音频播放失败:', err);
                 }
+                setIsPlaying(false);
             });
         }
-    }, [song, url, startTime]); // 监控这些状态变化
+    }, [currentSong, url, startTime]); // 监控这些状态变化
 
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
 
         const updatePosition = () => {
-            // 将秒转换为毫秒，与song.duration单位保持一致
-            setPosition(audio.currentTime * 1000);
+            // 将秒转换为毫秒，与currentSong.duration单位保持一致
+            setCurrentPosition(audio.currentTime * 1000);
+        };
+
+        const handlePlay = () => {
+            setIsPlaying(true);
+        };
+
+        const handlePause = () => {
+            setIsPlaying(false);
         };
 
         const handleEnded = async () => {
@@ -150,28 +164,34 @@ export default function MusicPlayer() {
                 const data = await res.json();
                 if (!data.success) {
                     // 如果切歌失败（可能是队列为空），则清空状态
-                    setSong(null);
+                    setCurrentSong(null);
                     setUrl('');
                     setStartTime(0);
-                    setPosition(0);
+                    setCurrentPosition(0);
+                    setIsPlaying(false);
                 }
                 // 如果切歌成功，WebSocket会推送新歌曲，无需手动处理
             } catch (err) {
                 console.error('自动切歌失败', err);
                 // 出错时清空状态
-                setSong(null);
+                setCurrentSong(null);
                 setUrl('');
                 setStartTime(0);
-                setPosition(0);
+                setCurrentPosition(0);
+                setIsPlaying(false);
             }
         };
 
         audio.addEventListener('timeupdate', updatePosition);
         audio.addEventListener('ended', handleEnded);
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
 
         return () => {
             audio.removeEventListener('timeupdate', updatePosition);
             audio.removeEventListener('ended', handleEnded);
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePause);
         };
     }, []); // 移除song依赖，确保监听器只添加一次
 
@@ -181,12 +201,12 @@ export default function MusicPlayer() {
                 {/* 歌曲信息 */}
                 <div className="flex items-center">
                     <div className="w-24 h-24 overflow-hidden flex-shrink-0 rounded-lg bg-gray-200">
-                        <img alt="music cover" src={song?.prcUrl || '/static/background.jpg'} className="w-full h-full object-cover" />
+                        <img alt="music cover" src={currentSong?.prcUrl || '/static/background.jpg'} className="w-full h-full object-cover" />
                     </div>
                     <div className="ml-6 min-w-0">
-                        <p className="text-2xl text-gray-500 font-medium">{song ? `由 Abyss 点歌` : '当前无播放'}</p>
-                        <p className="truncate font-bold">{song?.name || '暂无歌曲'}</p>
-                        <p className="truncate text-sm tracking-tight">{song?.artist || ''}</p>
+                        <p className="text-2xl text-gray-500 font-medium">{currentSong ? `由 Abyss 点歌` : '当前无播放'}</p>
+                        <p className="truncate font-bold">{currentSong?.name || '暂无歌曲'}</p>
+                        <p className="truncate text-sm tracking-tight">{currentSong?.artist || ''}</p>
                     </div>
                 </div>
 
@@ -194,10 +214,10 @@ export default function MusicPlayer() {
                 <Slider
                     aria-label="time-indicator"
                     size="small"
-                    value={position}
+                    value={currentPosition}
                     min={0}
                     step={1}
-                    max={song?.duration || 500}
+                    max={currentSong?.duration || 500}
                     disabled
                     sx={{
                         '& .MuiSlider-thumb': { display: 'none' },
@@ -208,8 +228,8 @@ export default function MusicPlayer() {
                 />
 
                 <div className="flex justify-between mt-[-8px]">
-                    <p className="text-xs opacity-50">{formatDuration(position)}</p>
-                    <p className="text-xs opacity-50">-{formatDuration((song?.duration || 500) - position)}</p>
+                    <p className="text-xs opacity-50">{formatDuration(currentPosition)}</p>
+                    <p className="text-xs opacity-50">-{formatDuration((currentSong?.duration || 500) - currentPosition)}</p>
                 </div>
 
                 <div className="flex items-center justify-center mt-[-8px] space-x-4">

@@ -8,14 +8,16 @@ import MusicQueue from '@/components/musicqueue';
 import UserInfo from '@/components/userinfo';
 import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
+import { MusicProvider } from '@/contexts/MusicContext';
 
 export default function Home() {
   const [activePanel, setActivePanel] = useState<'chat' | 'queue'>('chat');
   const [leftPanel, setLeftPanel] = useState<'info' | 'request'>('info');
 
   return (
-    <Fragment>
-      <div className="h-[100vh] grid grid-cols-7 grid-rows-8 gap-3">
+    <MusicProvider>
+      <Fragment>
+        <div className="h-[100vh] grid grid-cols-7 grid-rows-8 gap-3">
         {/* 中间播放器区域 */}
         <div className="col-span-3 row-span-3 col-start-3 row-start-1">
           <div className="w-full h-full flex items-center justify-center">
@@ -130,7 +132,8 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </div>
-    </Fragment>
+        </div>
+      </Fragment>
+    </MusicProvider>
   );
 }

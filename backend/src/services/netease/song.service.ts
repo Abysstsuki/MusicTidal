@@ -52,3 +52,25 @@ export const getSongPlayInfo = async (songId: string) => {
         time: data.time, // duration in ms
     };
 };
+
+export const getSongLyric = async (songId: string) => {
+    const response = await neteaseAxios.get('/lyric', {
+        params: {
+            id: songId,
+        },
+    });
+
+    const data = response.data;
+    if (!data) {
+        throw new Error('No lyric data found.');
+    }
+
+    // 提取歌词文本，优先使用lrc，如果没有则返回空字符串
+    const lyricText = data.lrc?.lyric || '';
+    
+    return {
+        lyric: lyricText,
+        tlyric: data.tlyric?.lyric || '', // 翻译歌词
+        romalrc: data.romalrc?.lyric || '', // 罗马音歌词
+    };
+};

@@ -3,69 +3,116 @@
 import { useEffect, useState, useRef } from 'react';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
+import { useMusicContext } from '@/contexts/MusicContext';
 
-const rawLyric = `
-[00:00.00] 作词 : Charles Ekhaus/Daniel Wells/Luke Olson/Michael James Tirabassi/Walter Kosner
-[00:01.00] 作曲 : Charles Ekhaus/Daniel Wells/Luke Olson/Michael James Tirabassi/Walter Kosner
-[00:13.56] I just need someone in my life to give it structure
-[00:19.69] To handle all the selfish ways I'd spend my time without her
-[00:26.07] You're everything I want, but I can't deal with all your lovers
-[00:32.34] Saying I'm the one, but it's your actions that speak louder
-[00:38.67] Giving me love when you are down and need another
-[00:44.95] I've got to get away and let you go, I've got to get over
-[00:51.24] But I love you so
-[00:57.60] I love you so
-[01:03.97] I love you so
-[01:10.31] I love you so
-[01:14.95] I'm gonna pack my things and leave you behind
-[01:20.96] This feeling's old and I know that I've made up my mind
-[01:27.27] I hope you feel what I felt when you shattered my soul
-[01:33.53] 'Cause you were cruel and I'm a fool
-[01:36.95] So please let me go
-[01:41.85] But I love you so (please let me go)
-[01:48.34] I love you so (please let me go)
-[01:54.49] I love you so (please let me go)
-[02:00.84] I love you so`;
+interface LyricLine {
+    time: number;
+    text: string;
+}
 
-function parseLyric(lyric: string) {
+function parseLyric(lyric: string): LyricLine[] {
     const lines = lyric.split('\n');
-    const pattern = /\[(\d{2}):(\d{2}\.\d{2})\](.*)/;
-    const result = [];
+    // 支持多种LRC歌词时间格式：[mm:ss.xxx] 或 [mm:ss.xx] 或 [mm:ss]
+    const pattern = /\[(\d{1,2}):(\d{2})(?:[.:]?(\d{2,3}))?\](.*)$/;
+    const result: LyricLine[] = [];
 
     for (const line of lines) {
         const match = line.match(pattern);
         if (match) {
-            const [, min, sec, text] = match;
-            result.push({
-                time: parseInt(min) * 60 + parseFloat(sec),
-                text: text.trim(),
-            });
+            const [, min, sec, ms = '0', text] = match;
+            const minutes = parseInt(min);
+            const seconds = parseInt(sec);
+
+            // 处理不同长度的毫秒：2位数按百分之一秒，3位数按千分之一秒
+            let milliseconds = 0;
+            if (ms && ms !== '0') {
+                if (ms.length === 2) {
+                    milliseconds = parseInt(ms) / 100; // [00:21.57] -> 0.57秒
+                } else if (ms.length === 3) {
+                    milliseconds = parseInt(ms) / 1000; // [00:01.000] -> 0.000秒
+                }
+            }
+
+            const timeInSeconds = minutes * 60 + seconds + milliseconds;
+            const lyricText = text.trim();
+
+            // 只添加有文本内容的歌词行
+            if (lyricText) {
+                result.push({
+                    time: timeInSeconds,
+                    text: lyricText,
+                });
+            }
         }
     }
+
+    // 按时间排序
+    result.sort((a, b) => a.time - b.time);
     return result;
 }
 
 export default function MusicLyrics() {
-    const lyrics = parseLyric(rawLyric);
-    const [position, setPosition] = useState(-1);
+    const { currentSong, currentPosition } = useMusicContext();
+    const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+    const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isUserScrolling, setIsUserScrolling] = useState(false);
+    const [previousSongId, setPreviousSongId] = useState<string | null>(null);
+
+    // 将毫秒转换为秒进行歌词匹配
+    const position = currentPosition / 1000;
 
     const currentIndex = lyrics.findIndex((line, index) => {
         const next = lyrics[index + 1];
         return position >= line.time && (!next || position < next.time);
     });
 
-    //歌词动态滚动测试
+    // 获取歌词数据
     useEffect(() => {
-        const interval = setInterval(() => {
-            setPosition(prev => prev + 0.5); // 每 500ms 播放 0.5 秒（可以调速度）
-        }, 500); // 每 500 毫秒更新一次
+        const fetchLyrics = async () => {
+            if (!currentSong?.id) {
+                setLyrics([]);
+                return;
+            }
 
-        return () => clearInterval(interval); // 组件卸载时清理
-    }, []);
+            setLoading(true);
+            try {
+                const response = await fetch(`/api/song/lyric?id=${currentSong.id}`);
+                const data = await response.json();
 
+                if (data.success && data.data.lyric) {
+                    const parsedLyrics = parseLyric(data.data.lyric);
+                    setLyrics(parsedLyrics);
+                } else {
+                    setLyrics([{ time: 0, text: '暂无歌词' }]);
+                }
+            } catch (error) {
+                console.error('获取歌词失败:', error);
+                setLyrics([{ time: 0, text: '歌词加载失败' }]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchLyrics();
+    }, [currentSong]); // 依赖整个currentSong对象，确保切歌时能正确触发
+
+    // 当歌曲真正切换时（ID发生变化），重置用户滚动状态
+    useEffect(() => {
+        const currentSongId = currentSong?.id || null;
+
+        // 只有当歌曲ID真正发生变化时才重置滚动状态
+        if (currentSongId !== previousSongId) {
+            setIsUserScrolling(false);
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+                scrollTimeoutRef.current = null;
+            }
+            if (currentSongId)
+                setPreviousSongId(currentSongId.toString());
+        }
+    }, [currentSong?.id, previousSongId]);
 
     // 用户滚动时，记录下来
     const handleScroll = () => {
@@ -104,18 +151,26 @@ export default function MusicLyrics() {
             <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-160 max-w-full mx-auto relative z-10 py-10">
                 <SimpleBar style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
                     <div className="flex flex-col items-center space-y-10" ref={containerRef}>
-                        {lyrics.map((line, index) => (
-                            <p
-                                key={index}
-                                data-idx={index}
-                                className={`transition-all duration-300 ${index === currentIndex
-                                    ? 'text-white text-xl font-bold opacity-100 scale-110'
-                                    : 'text-white text-lg opacity-60'
-                                    } max-w-full w-[90%] text-center break-words`}
-                            >
-                                {line.text || '...'}
+                        {loading ? (
+                            <p className="text-white text-lg opacity-60">加载歌词中...</p>
+                        ) : lyrics.length === 0 ? (
+                            <p className="text-white text-lg opacity-60">
+                                {currentSong ? '暂无歌词' : '请选择歌曲'}
                             </p>
-                        ))}
+                        ) : (
+                            lyrics.map((line, index) => (
+                                <p
+                                    key={index}
+                                    data-idx={index}
+                                    className={`transition-all duration-300 ${index === currentIndex
+                                            ? 'text-white text-xl font-bold opacity-100 scale-110'
+                                            : 'text-white text-lg opacity-60'
+                                        } max-w-full w-[90%] text-center break-words`}
+                                >
+                                    {line.text || '...'}
+                                </p>
+                            ))
+                        )}
                     </div>
                 </SimpleBar>
             </div>
