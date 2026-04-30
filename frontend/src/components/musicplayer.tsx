@@ -20,8 +20,29 @@ export default function MusicPlayer() {
     const { currentSong, currentPosition, setCurrentSong, setCurrentPosition, setIsPlaying } = useMusicContext();
     const [url, setUrl] = useState<string>('');
     const [startTime, setStartTime] = useState<number>(0);
+    const [showPlayPrompt, setShowPlayPrompt] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // 尝试播放当前音频（供自动播放和用户手势恢复使用）
+    const tryPlay = React.useCallback(async () => {
+        const audio = audioRef.current;
+        if (!audio || !url) return false;
+        try {
+            await audio.play();
+            setIsPlaying(true);
+            setShowPlayPrompt(false);
+            return true;
+        } catch (err) {
+            if ((err as Error).name === 'NotAllowedError') {
+                setShowPlayPrompt(true);
+            } else {
+                console.warn('音频播放失败:', err);
+            }
+            setIsPlaying(false);
+            return false;
+        }
+    }, [url]);
 
     // 同步音频按钮功能
     const handleSyncAudio = async () => {
@@ -30,6 +51,7 @@ export default function MusicPlayer() {
             const data = await res.json();
             if (data.success && data.currentSong && data.currentSong.url) {
                 const { song, startTime, url } = data.currentSong;
+                setShowPlayPrompt(false);
                 // 确保创建新的歌曲对象引用，触发组件重新渲染
                 setCurrentSong(song ? { ...song } : null);
                 setStartTime(startTime);
@@ -96,6 +118,7 @@ export default function MusicPlayer() {
             if (data.type === 'PLAY_SONG') {
                 const { song, url, startTime } = data.payload;
                 console.log('音乐播放器: 收到WebSocket消息，新歌曲:', song?.name, 'ID:', song?.id);
+                setShowPlayPrompt(false);
                 // 确保创建新的歌曲对象引用，触发组件重新渲染
                 setCurrentSong(song ? { ...song } : null);
                 setUrl(url);
@@ -119,23 +142,16 @@ export default function MusicPlayer() {
 
         // 设置音频源
         audio.src = url;
-        
+
         // 计算播放位置
         const delay = (Date.now() - startTime) / 1000;
         audio.currentTime = Math.min(delay, currentSong.duration / 1000);
-        
-        // 主动检查并播放音频（类似旧组件的逻辑）
+
+        // 主动检查并播放音频
         if (audio.paused) {
-            audio.play().then(() => {
-                setIsPlaying(true);
-            }).catch((err) => {
-                if (err.name !== 'NotAllowedError') {
-                    console.warn('音频播放失败:', err);
-                }
-                setIsPlaying(false);
-            });
+            tryPlay();
         }
-    }, [currentSong, url, startTime]); // 监控这些状态变化
+    }, [currentSong, url, startTime, tryPlay]); // 监控这些状态变化
 
     useEffect(() => {
         const audio = audioRef.current;
@@ -170,7 +186,7 @@ export default function MusicPlayer() {
                     setCurrentPosition(0);
                     setIsPlaying(false);
                 }
-                // 如果切歌成功，WebSocket会推送新歌曲，无需手动处理
+                // 如果切歌成功，WebSocket会推送新歌曲
             } catch (err) {
                 console.error('自动切歌失败', err);
                 // 出错时清空状态
@@ -194,6 +210,23 @@ export default function MusicPlayer() {
             audio.removeEventListener('pause', handlePause);
         };
     }, []); // 移除song依赖，确保监听器只添加一次
+
+    // 用户手势恢复播放：当浏览器阻止自动播放时，捕获首次点击来恢复
+    useEffect(() => {
+        if (!showPlayPrompt) return;
+
+        const handler = () => {
+            tryPlay();
+        };
+
+        // 使用 once:true 确保捕获一次交互后就移除
+        document.addEventListener('click', handler, { once: true });
+        document.addEventListener('touchstart', handler, { once: true });
+        return () => {
+            document.removeEventListener('click', handler);
+            document.removeEventListener('touchstart', handler);
+        };
+    }, [showPlayPrompt, tryPlay]);
 
     return (
         <div className="w-full p-3 relative overflow-hidden">
@@ -243,6 +276,18 @@ export default function MusicPlayer() {
                     <Slider aria-label="Volume" defaultValue={30} className="w-20" />
                     <VolumeUpRounded className="text-gray-500" />
                 </div>
+
+                {/* 浏览器阻止自动播放时的点击播放遮罩 */}
+                {showPlayPrompt && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg z-20 cursor-pointer"
+                         onClick={(e) => { e.stopPropagation(); tryPlay(); }}>
+                        <div className="text-white text-center">
+                            <div className="text-5xl mb-2">▶</div>
+                            <div className="text-base font-medium">点击播放</div>
+                            <div className="text-xs mt-1 text-white/60">单击任意位置即可开始播放</div>
+                        </div>
+                    </div>
+                )}
 
                 <audio ref={audioRef} hidden />
             </div>

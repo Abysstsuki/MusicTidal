@@ -132,6 +132,16 @@ export async function setCurrentPlayingSong(song: any) {
     });
 }
 
+// 供 songQueueService 同步当前播放状态（避免各自维护一份造成新连接收不到推送）
+export function setCurrentSongInfo(song: any | null, url: string, startTime: number) {
+    if (song) {
+        currentSong = { ...song, url };
+    } else {
+        currentSong = null;
+    }
+    currentStartTime = startTime;
+}
+
 // 可供其他模块使用的广播函数
 export function broadcastToAll(message: string | object) {
     broadcast(message);

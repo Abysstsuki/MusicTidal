@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import MusicItem from './modelItem/MusicItem';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
@@ -10,14 +10,15 @@ interface MusicReqProps {
     isVisible: boolean;
 }
 
+const PAGE_SIZE = 10;
+
 export default function MusicReq({ isVisible }: MusicReqProps) {
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchInput, setSearchInput] = useState('');
     const [songs, setSongs] = useState<Song[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-
-    const listContainerRef = useRef<HTMLDivElement>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
-    const [visibleCount, setVisibleCount] = useState(0); // 当前页面可显示条数
+    const [totalPages, setTotalPages] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const lastKeyword = useRef('');
 
     const handleEnqueue = async (song: Song) => {
         try {
@@ -39,63 +40,53 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
         }
     };
 
-    const handleSearch = async () => {
-        if (!searchTerm.trim()) return;
-
+    const fetchPage = async (keyword: string, page: number) => {
+        setLoading(true);
         try {
-            const res = await fetch(`/api/song/search?keywords=${encodeURIComponent(searchTerm)}`);
+            const offset = (page - 1) * PAGE_SIZE;
+            const res = await fetch(
+                `/api/song/search?keywords=${encodeURIComponent(keyword)}&offset=${offset}&limit=${PAGE_SIZE}`
+            );
             const data: SongSearchResponse = await res.json();
 
             if (data.success && Array.isArray(data.data)) {
                 setSongs(data.data);
-                setCurrentPage(1);  // 新搜索重置页码
+                const total = data.total ?? 0;
+                setTotalPages(total > 0 ? Math.ceil(total / PAGE_SIZE) : 1);
             } else {
-                console.error('搜索结果格式不正确:', data);
                 setSongs([]);
+                setTotalPages(1);
             }
         } catch (err) {
             console.error('搜索出错:', err);
             setSongs([]);
+            setTotalPages(1);
         } finally {
-            setSearchTerm('');
+            setLoading(false);
         }
     };
 
-    // 监听容器和内容高度，动态计算当前页可显示条目数
-    useEffect(() => {
-        if (!isVisible) return;
+    const handleSearch = async () => {
+        const term = searchInput.trim();
+        if (!term) return;
 
-        const updateVisibleCount = () => {
-            const containerHeight = listContainerRef.current?.offsetHeight || 0;
-            const contentHeight = contentRef.current?.scrollHeight || 0;
+        lastKeyword.current = term;
+        setSearchInput('');
+        setCurrentPage(1);
+        await fetchPage(term, 1);
+    };
 
-            // 假设单个条目高度接近 contentHeight / 当前显示条目数
-            // 为简单起见，估计条目高度或者根据实际渲染的条目数动态调整
-            if (contentRef.current && containerHeight) {
-                // 计算每条高度（contentHeight / rendered items）
-                const renderedCount = contentRef.current.children.length || 1;
-                const approxItemHeight = contentHeight / renderedCount;
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleSearch();
+    };
 
-                // 容器最多能显示多少条
-                const maxItems = Math.floor(containerHeight / approxItemHeight);
-                setVisibleCount(maxItems > 0 ? maxItems : renderedCount);
-            }
-        };
+    const goToPage = (page: number) => {
+        if (page < 1 || page > totalPages || page === currentPage || !lastKeyword.current) return;
+        setCurrentPage(page);
+        fetchPage(lastKeyword.current, page);
+    };
 
-        updateVisibleCount();
-        window.addEventListener('resize', updateVisibleCount);
-        return () => window.removeEventListener('resize', updateVisibleCount);
-    }, [isVisible, songs, currentPage]);
-
-    // 计算分页总数（基于 visibleCount 动态分页）
-    const totalPages = visibleCount > 0 ? Math.ceil(songs.length / visibleCount) : 1;
-    const currentSongs = songs.slice(
-        (currentPage - 1) * visibleCount,
-        currentPage * visibleCount
-    );
-
-    const goToPrev = () => currentPage > 1 && setCurrentPage(currentPage - 1);
-    const goToNext = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
+    const hasSearched = lastKeyword.current !== '';
 
     return (
         <div className={`flex h-full w-full p-3 relative overflow-hidden ${isVisible ? '' : 'hidden'}`}>
@@ -105,23 +96,31 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                     <input
                         type="text"
                         placeholder="搜索歌曲或歌手"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         className="flex-1 rounded-md px-3 py-2 text-sm bg-white/80 text-black focus:outline-none"
                     />
                     <button
                         onClick={handleSearch}
-                        className="bg-white/30 text-white text-sm px-4 py-2 rounded-md hover:bg-white/40 transition"
+                        disabled={loading}
+                        className="bg-white/30 text-white text-sm px-4 py-2 rounded-md hover:bg-white/40 transition disabled:opacity-50"
                     >
-                        搜索
+                        {loading ? '搜索中...' : '搜索'}
                     </button>
                 </div>
 
-                {/* 列表容器 */}
-                <div className="flex-1 overflow-hidden" ref={listContainerRef}>
+                {/* 列表 */}
+                <div className="flex-1 overflow-hidden">
                     <SimpleBar style={{ maxHeight: '100%' }} autoHide={true}>
-                        <div ref={contentRef} className="space-y-3">
-                            {currentSongs.map((song,index) => (
+                        <div className="space-y-3">
+                            {!hasSearched && !loading && (
+                                <p className="text-center text-white/50 text-sm py-8">请输入关键词搜索歌曲</p>
+                            )}
+                            {hasSearched && songs.length === 0 && !loading && (
+                                <p className="text-center text-white/50 text-sm py-8">未找到结果</p>
+                            )}
+                            {songs.map((song, index) => (
                                 <MusicItem
                                     id={song.id}
                                     key={song.id}
@@ -143,34 +142,60 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                     </SimpleBar>
                 </div>
 
-                {/* 分页控制器 */}
-                <div className="mb-2 flex justify-center items-center space-x-4 text-sm text-white">
-                    <button
-                        onClick={goToPrev}
-                        disabled={currentPage === 1}
-                        className={`px-3 py-1 rounded-md transition ${
-                            currentPage === 1
-                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                                : 'bg-white/20 hover:bg-white/30'
-                        }`}
-                    >
-                        上一页
-                    </button>
-                    <span className="text-white/80">
-                        第 {currentPage} 页 / 共 {totalPages} 页
-                    </span>
-                    <button
-                        onClick={goToNext}
-                        disabled={currentPage === totalPages}
-                        className={`px-3 py-1 rounded-md transition ${
-                            currentPage === totalPages
-                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                                : 'bg-white/20 hover:bg-white/30'
-                        }`}
-                    >
-                        下一页
-                    </button>
-                </div>
+                {/* 分页 */}
+                {hasSearched && totalPages > 1 && (
+                    <div className="mt-3 flex justify-center items-center space-x-2 text-sm text-white">
+                        <button
+                            onClick={() => goToPage(1)}
+                            disabled={currentPage === 1}
+                            className={`px-2 py-1 rounded transition ${
+                                currentPage === 1
+                                    ? 'text-white/30 cursor-not-allowed'
+                                    : 'hover:bg-white/20'
+                            }`}
+                        >
+                            &laquo;
+                        </button>
+                        <button
+                            onClick={() => goToPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`px-3 py-1 rounded-md transition ${
+                                currentPage === 1
+                                    ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                                    : 'bg-white/20 hover:bg-white/30'
+                            }`}
+                        >
+                            上一页
+                        </button>
+
+                        <span className="text-white/80 px-2">
+                            第 {currentPage} / {totalPages} 页
+                        </span>
+
+                        <button
+                            onClick={() => goToPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`px-3 py-1 rounded-md transition ${
+                                currentPage === totalPages
+                                    ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                                    : 'bg-white/20 hover:bg-white/30'
+                            }`}
+                        >
+                            下一页
+                        </button>
+                        <button
+                            onClick={() => goToPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className={`px-2 py-1 rounded transition ${
+                                currentPage === totalPages
+                                    ? 'text-white/30 cursor-not-allowed'
+                                    : 'hover:bg-white/20'
+                            }`}
+                        >
+                            &raquo;
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

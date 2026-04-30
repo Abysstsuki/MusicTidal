@@ -8,4 +8,7 @@ export interface Song {
 export interface SongSearchResponse {
   success: boolean;
   data: Song[];
+  total?: number;
+  offset?: number;
+  limit?: number;
 }

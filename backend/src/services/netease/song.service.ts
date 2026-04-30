@@ -1,4 +1,4 @@
-import { neteaseAxios } from '../../utils/axiosNetease';
+import { neteaseHttp } from '../../utils/neteaseHttp';
 interface SongSearchResult {
     id: number;
     name: string;
@@ -7,34 +7,42 @@ interface SongSearchResult {
     album: string;
     duration: number;
 }
-export const searchSongByKeyword = async (keywords: string): Promise<SongSearchResult[]> => {
-    const response = await neteaseAxios.get('/cloudsearch', {
+export const searchSongByKeyword = async (keywords: string, offset: number = 0, limit: number = 10): Promise<{ songs: SongSearchResult[]; total: number }> => {
+    const response = await neteaseHttp.get('/cloudsearch', {
         params: {
             keywords,
-            type: 1, // type 1 表示单曲搜索
-            limit: 50, // 默认返回前10条
+            type: 1,
+            limit,
+            offset,
         },
     });
 
-    const songs = response.data?.result?.songs;
-
-    if (!Array.isArray(songs)) {
-        throw new Error('No search results found.');
+    const result = response.data?.result;
+    if (!result) {
+        throw new Error(`Netease API returned no result field. code=${response.data?.code} body=${JSON.stringify(response.data).slice(0, 200)}`);
     }
 
-    return songs.map((song: any): SongSearchResult => ({
-        id: song.id,
-        name: song.name,
-        artist: song.ar?.map((a: any) => a.name).join(', ') || '',
-        prcUrl: song.al?.picUrl || '',
-        album: song.al?.name || '',
-        duration: song.dt || 0,
-    }));
+    const songs = result.songs;
+    if (!Array.isArray(songs)) {
+        throw new Error(`No songs array in result. songCount=${result.songCount} hasSongs=${'songs' in result}`);
+    }
+
+    return {
+        songs: songs.map((song: any): SongSearchResult => ({
+            id: song.id,
+            name: song.name,
+            artist: song.ar?.map((a: any) => a.name).join(', ') || '',
+            prcUrl: song.al?.picUrl || '',
+            album: song.al?.name || '',
+            duration: song.dt || 0,
+        })),
+        total: result.songCount ?? songs.length,
+    };
 };
 
 
 export const getSongPlayInfo = async (songId: string) => {
-    const response = await neteaseAxios.get('/song/url/v1', {
+    const response = await neteaseHttp.get('/song/url/v1', {
         params: {
             id: songId,
             level: 'exhigh',
@@ -54,7 +62,7 @@ export const getSongPlayInfo = async (songId: string) => {
 };
 
 export const getSongLyric = async (songId: string) => {
-    const response = await neteaseAxios.get('/lyric', {
+    const response = await neteaseHttp.get('/lyric', {
         params: {
             id: songId,
         },

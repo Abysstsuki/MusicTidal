@@ -56,6 +56,7 @@ export default function MusicLyrics() {
     const [lyrics, setLyrics] = useState<LyricLine[]>([]);
     const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const simpleBarRef = useRef<any>(null);
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isUserScrolling, setIsUserScrolling] = useState(false);
     const [previousSongId, setPreviousSongId] = useState<string | null>(null);
@@ -114,27 +115,29 @@ export default function MusicLyrics() {
         }
     }, [currentSong?.id, previousSongId]);
 
-    // 用户滚动时，记录下来
-    const handleScroll = () => {
-        if (!isUserScrolling) {
-            setIsUserScrolling(true);
-        }
-        if (scrollTimeoutRef.current) {
-            clearTimeout(scrollTimeoutRef.current);
-        }
-        scrollTimeoutRef.current = setTimeout(() => {
-            setIsUserScrolling(false);
-        }, 3000); // 用户停止滚动3秒后，允许播放器重新控制
-    };
-
+    // 监听 SimpleBar 实际滚动元素，检测用户手动滚动
     useEffect(() => {
-        if (containerRef.current) {
-            const el = containerRef.current;
-            el.addEventListener('scroll', handleScroll);
-            return () => {
-                el.removeEventListener('scroll', handleScroll);
-            };
-        }
+        const scrollEl = simpleBarRef.current?.getScrollElement();
+        if (!scrollEl) return;
+
+        const handleScroll = () => {
+            setIsUserScrolling(true);
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+            }
+            scrollTimeoutRef.current = setTimeout(() => {
+                setIsUserScrolling(false);
+            }, 3000); // 用户停止滚动3秒后，允许播放器重新控制
+        };
+
+        scrollEl.addEventListener('scroll', handleScroll);
+        return () => {
+            scrollEl.removeEventListener('scroll', handleScroll);
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+                scrollTimeoutRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -149,7 +152,7 @@ export default function MusicLyrics() {
     return (
         <div className="flex h-full w-full p-3 relative overflow-hidden">
             <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-160 max-w-full mx-auto relative z-10 py-10">
-                <SimpleBar style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
+                <SimpleBar ref={simpleBarRef} style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
                     <div className="flex flex-col items-center space-y-10" ref={containerRef}>
                         {loading ? (
                             <p className="text-white text-lg opacity-60">加载歌词中...</p>

@@ -3,7 +3,7 @@ import app from './app';
 import dotenv from 'dotenv';
 import http from 'http';
 import { setupWebSocketServer } from './services/websocketServer';
-import { verifyCookie } from './utils/axiosNetease';
+import { verifyCookie } from './utils/neteaseHttp';
 import { songQueueService } from './services/songQueueService';
 
 dotenv.config();

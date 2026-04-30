@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o NUL -w \"%{http_code}\" http://localhost:3457/)",
+      "Bash(curl -s \"http://localhost:3457/cloudsearch?keywords=1&type=1&limit=5\")",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS: %{http_code}\" \"http://localhost:3457/user/account\")",
+      "Bash(curl *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT: $?\")"
+    ]
+  }
+}

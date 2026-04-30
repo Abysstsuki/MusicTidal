@@ -1,5 +1,5 @@
 import { Song, SongWithInstance } from '../types/song';
-import { broadcast } from './websocketServer';
+import { broadcast, setCurrentSongInfo } from './websocketServer';
 import { getSongPlayInfo } from '../services/netease/song.service';
 class SongQueueService {
   private queue: SongWithInstance[] = [];
@@ -59,6 +59,9 @@ class SongQueueService {
     const startTime = Date.now();
     this.currentSong = { song: nextSong, startTime };
 
+    // 同步到 WebSocket 服务端，确保新连接能收到当前播放状态
+    setCurrentSongInfo(nextSong, playInfo.url, startTime);
+
     // 通知所有客户端
     broadcast({
       type: 'PLAY_SONG',
@@ -72,6 +75,7 @@ class SongQueueService {
     // 定时播放下一首
     setTimeout(() => {
       this.currentSong = null;
+      setCurrentSongInfo(null, '', 0); // 清除 WebSocket 状态
       this.startNextSongIfIdle(); // 自动播放下一首
     }, nextSong.duration * 1000); // duration 单位：秒
   }
@@ -79,6 +83,7 @@ class SongQueueService {
   skipToNext() {
     // 停止当前歌曲
     this.currentSong = null;
+    setCurrentSongInfo(null, '', 0); // 清除 WebSocket 状态
     // 立即开始下一首
     this.startNextSongIfIdle();
   }
