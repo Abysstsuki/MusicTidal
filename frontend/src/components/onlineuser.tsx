@@ -75,19 +75,26 @@ export default function OnlineUser() {
 
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
-            <div className="w-full h-full bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg overflow-y-auto">
-                <h2 className="text-white text-lg font-semibold mb-2">在线用户</h2>
+            <div className="w-full h-full p-4 overflow-y-auto"
+                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
 
-                <div className="flex flex-wrap gap-2">
+                {/* Header */}
+                <div className="flex justify-between items-center pb-2 mb-3"
+                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>ONLINE USERS</span>
+                    <span style={{ fontSize: '9px', color: '#3A6BFF' }}>{onlineUsers.length}</span>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
                     <AnimatePresence>
                         {onlineUsers.map((user) => (
-                            <OnlineUserItem key={user.id} id={user.id} />
+                            <OnlineUserItem key={user.id} id={user.id} currentUser={username} />
                         ))}
                     </AnimatePresence>
                 </div>
 
                 {onlineUsers.length === 0 && (
-                    <p className="text-white/60 italic text-sm mt-4">暂无在线用户</p>
+                    <p style={{ color: '#8B8FA3', fontSize: '12px', fontStyle: 'italic', marginTop: 16, opacity: 0.6 }}>暂无在线用户</p>
                 )}
             </div>
         </div>

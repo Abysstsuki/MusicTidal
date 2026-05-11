@@ -1,13 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, Stack } from '@mui/material';
-import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
-import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
-import LogoutIcon from '@mui/icons-material/Logout';
-import LoginIcon from '@mui/icons-material/Login';
 import AuthModal from './authmodal';
-import MusicRequestModal from './musicreq';
 import BindPlaylistModal from './bindlist';
 
 interface User {
@@ -18,7 +12,6 @@ interface User {
 
 export default function UserInfo() {
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [showRequestModal, setShowRequestModal] = useState(false);
     const [showBindModal, setShowBindModal] = useState(false);
     const [user, setUser] = useState<User>({
         isLoggedIn: false,
@@ -29,7 +22,6 @@ export default function UserInfo() {
     // 页面刷新时尝试用 token 恢复用户信息
     useEffect(() => {
         const token = localStorage.getItem('token');
-        console.log(token);
         if (!token) return;
 
         fetch('/api/user/me', {
@@ -80,62 +72,92 @@ export default function UserInfo() {
 
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-160 max-w-full mx-auto relative z-10 py-10 flex flex-col items-center space-y-6">
-                <h2 className="text-white text-2xl font-semibold">
-                    {user.isLoggedIn ? `欢迎，${user.name}` : '未登录'}
-                </h2>
+            <div className="p-6 w-160 max-w-full mx-auto relative z-10 flex flex-col items-center space-y-6"
+                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
 
-                {user.isLoggedIn && (
-                    <Stack direction="row" spacing={2}>
-                        {!user.isPlaylistBound ? (
-                            <Button
-                                variant="outlined"
-                                startIcon={<PlaylistAddIcon />}
-                                onClick={() => setShowBindModal(true)}
-                                sx={{
-                                    color: '#fff',
-                                    borderColor: '#fff',
-                                    '&:hover': { borderColor: '#ccc' },
-                                }}
-                            >
-                                绑定歌单
-                            </Button>
+                {/* DataCircle avatar */}
+                <div style={{
+                    width: 56, height: 56,
+                    border: '0.5px solid rgba(58,107,255,0.2)',
+                    borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div style={{ width: 8, height: 8, background: '#3A6BFF', borderRadius: '50%', opacity: 0.5 }} />
+                </div>
+
+                {/* Signal status */}
+                <div className="text-center">
+                    <div style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>SIGNAL STATUS</div>
+                    <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: '#8B8FA3', marginTop: 4 }}>
+                        {user.isLoggedIn ? (
+                            <>CONNECTED / <span style={{ color: '#3A6BFF' }}>{user.name}</span></>
                         ) : (
-                            <Button
-                                variant="outlined"
-                                startIcon={<PlaylistAddIcon />}
-                                onClick={handleUnbind}
-                                sx={{
-                                    color: '#fff',
-                                    borderColor: '#fff',
-                                    '&:hover': { borderColor: '#ccc' },
-                                }}
-                            >
-                                解除绑定
-                            </Button>
+                            <>OFFLINE / <span style={{ color: '#3A6BFF' }}>LOGIN</span></>
                         )}
-                    </Stack>
-                )}
+                    </div>
+                </div>
 
-                <div>
+                {/* Action buttons */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 240 }}>
                     {user.isLoggedIn ? (
-                        <Button
-                            variant="contained"
-                            startIcon={<LogoutIcon />}
-                            color="error"
-                            onClick={handleLogout}
-                        >
-                            登出
-                        </Button>
+                        <>
+                            {!user.isPlaylistBound ? (
+                                <button onClick={() => setShowBindModal(true)}
+                                        style={{
+                                            padding: '6px 16px',
+                                            border: '0.5px solid rgba(58,107,255,0.3)',
+                                            fontSize: '9px',
+                                            letterSpacing: '0.3em',
+                                            color: '#3A6BFF',
+                                            background: 'transparent',
+                                            cursor: 'pointer',
+                                            textAlign: 'center'
+                                        }}>
+                                    BIND PLAYLIST
+                                </button>
+                            ) : (
+                                <button onClick={handleUnbind}
+                                        style={{
+                                            padding: '6px 16px',
+                                            border: '0.5px solid rgba(255,255,255,0.1)',
+                                            fontSize: '9px',
+                                            letterSpacing: '0.3em',
+                                            color: 'rgba(255,255,255,0.3)',
+                                            background: 'transparent',
+                                            cursor: 'pointer',
+                                            textAlign: 'center'
+                                        }}>
+                                    UNBIND
+                                </button>
+                            )}
+                            <button onClick={handleLogout}
+                                    style={{
+                                        padding: '6px 16px',
+                                        border: '0.5px solid rgba(255,80,80,0.3)',
+                                        fontSize: '9px',
+                                        letterSpacing: '0.3em',
+                                        color: 'rgba(255,80,80,0.6)',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                        textAlign: 'center'
+                                    }}>
+                                LOGOUT
+                            </button>
+                        </>
                     ) : (
-                        <Button
-                            variant="contained"
-                            startIcon={<LoginIcon />}
-                            color="primary"
-                            onClick={() => setShowAuthModal(true)}
-                        >
-                            登录 / 注册
-                        </Button>
+                        <button onClick={() => setShowAuthModal(true)}
+                                style={{
+                                    padding: '6px 16px',
+                                    border: '0.5px solid rgba(58,107,255,0.3)',
+                                    fontSize: '9px',
+                                    letterSpacing: '0.3em',
+                                    color: '#3A6BFF',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    textAlign: 'center'
+                                }}>
+                            LOGIN / REGISTER
+                        </button>
                     )}
                 </div>
             </div>
@@ -144,7 +166,6 @@ export default function UserInfo() {
                 <div className="absolute inset-0 z-50">
                     <AuthModal
                         onClose={() => setShowAuthModal(false)}
-                        // 修改这里，让 AuthModal 返回 token 和用户名
                         onLoginSuccess={(username: string, token: string) =>
                             handleLoginSuccess(username, token)
                         }

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     return new Response(JSON.stringify(data), { status: 200 });
-  } catch (error) {
+  } catch {
     return new Response(JSON.stringify({ error: '服务器错误，请稍后重试' }), { status: 500 });
   }
 }

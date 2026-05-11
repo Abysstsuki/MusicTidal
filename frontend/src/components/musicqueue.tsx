@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import MusicItem from './modelItem/MusicItem';
 import { Song } from '@/types/music';
 
@@ -85,42 +83,69 @@ export default function MusicQueue() {
 
   return (
     <div className="w-full h-full p-3 relative overflow-hidden">
-      <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto space-y-3 text-white text-sm">
-        {queue.length === 0 ? (
-          <div className="p-6 rounded-lg text-center">
-            <p className="text-gray-400 text-lg">当前歌曲队列为空，请点歌</p>
-          </div>
-        ) : (
-          queue.map((song, index) => (
-            <MusicItem
-              id={song.id}
-              key={song.instanceId} // ✅ 唯一 key
-              index={index}
-              prcUrl={song.prcUrl}
-              name={song.name}
-              artist={song.artist}
-              duration={song.duration}
-            >
-              <div className="flex items-center gap-2 ml-2">
-                <button
-                  title="置顶"
-                  onClick={() => moveToTop(song.instanceId)}
-                  className="text-white/50 hover:text-white transition-all"
-                >
-                  <ArrowUpwardIcon />
-                </button>
-                <button
-                  title="移除"
-                  onClick={() => removeFromQueue(song.instanceId)}
-                  className="text-white/50 hover:text-red-400 transition-all"
-                >
-                  <DeleteIcon />
-                </button>
-              </div>
-            </MusicItem>
-          ))
-        )}
-      </div>
+        <div className="p-4 h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto"
+             style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+
+            {/* Header */}
+            <div className="flex justify-between items-center pb-2 mb-3"
+                 style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>QUEUE LIST</span>
+                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>
+                    {queue.length} ITEMS
+                </span>
+            </div>
+
+            {queue.length === 0 ? (
+                <div className="py-6 text-center">
+                    <p style={{ color: '#8B8FA3', fontSize: '14px' }}>当前队列为空</p>
+                </div>
+            ) : (
+                queue.map((song, index) => (
+                    <MusicItem
+                        id={song.id}
+                        key={song.instanceId}
+                        index={index}
+                        prcUrl={song.prcUrl}
+                        name={song.name}
+                        artist={song.artist}
+                        duration={song.duration}
+                    >
+                        <div className="flex items-center gap-1 ml-2">
+                            <button
+                                title="置顶"
+                                onClick={() => moveToTop(song.instanceId)}
+                                style={{
+                                    padding: '1px 5px',
+                                    border: '0.5px solid rgba(255,255,255,0.1)',
+                                    fontSize: '8px',
+                                    letterSpacing: '0.2em',
+                                    color: 'rgba(255,255,255,0.25)',
+                                    background: 'transparent',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ▲ TOP
+                            </button>
+                            <button
+                                title="移除"
+                                onClick={() => removeFromQueue(song.instanceId)}
+                                style={{
+                                    padding: '1px 5px',
+                                    border: '0.5px solid rgba(255,255,255,0.1)',
+                                    fontSize: '8px',
+                                    letterSpacing: '0.2em',
+                                    color: 'rgba(255,255,255,0.25)',
+                                    background: 'transparent',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ✕ DEL
+                            </button>
+                        </div>
+                    </MusicItem>
+                ))
+            )}
+        </div>
     </div>
   );
 }

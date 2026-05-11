@@ -8,7 +8,40 @@ import MusicQueue from '@/components/musicqueue';
 import UserInfo from '@/components/userinfo';
 import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
-import { MusicProvider } from '@/contexts/MusicContext';
+import { MusicProvider, useMusicContext } from '@/contexts/MusicContext';
+
+function BackgroundLayer() {
+    const { currentSong } = useMusicContext();
+
+    return (
+        <>
+            {/* 封面高模糊背景 */}
+            {currentSong?.prcUrl && (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: -3,
+                        backgroundImage: `url(${currentSong.prcUrl})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        filter: 'blur(40px) saturate(1.2)',
+                        transform: 'scale(1.1)',
+                        opacity: 0.25,
+                        transition: 'background-image 1s ease',
+                        pointerEvents: 'none',
+                    }}
+                />
+            )}
+            {/* 坐标网格 */}
+            <div
+                className="grid-overlay"
+                style={{
+                    position: 'fixed', inset: 0, zIndex: -1,
+                    pointerEvents: 'none',
+                }}
+            />
+        </>
+    );
+}
 
 export default function Home() {
   const [activePanel, setActivePanel] = useState<'chat' | 'queue'>('chat');
@@ -16,6 +49,7 @@ export default function Home() {
 
   return (
     <MusicProvider>
+        <BackgroundLayer />
       <Fragment>
         <div className="h-[100vh] grid grid-cols-7 grid-rows-8 gap-3">
         {/* 中间播放器区域 */}
@@ -38,20 +72,20 @@ export default function Home() {
           <div className="flex justify-center space-x-4 mb-2">
             <button
               onClick={() => setLeftPanel('info')}
-              className={`px-4 py-1 rounded-full text-sm font-semibold transition-all ${
+              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
                 leftPanel === 'info'
-                  ? 'bg-white/30 text-white'
-                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
+                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
               }`}
             >
               在线信息
             </button>
             <button
               onClick={() => setLeftPanel('request')}
-              className={`px-4 py-1 rounded-full text-sm font-semibold transition-all ${
+              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
                 leftPanel === 'request'
-                  ? 'bg-white/30 text-white'
-                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
+                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
               }`}
             >
               点歌
@@ -91,20 +125,20 @@ export default function Home() {
           <div className="flex justify-center space-x-4 mb-2">
             <button
               onClick={() => setActivePanel('chat')}
-              className={`px-4 py-1 rounded-full text-sm font-semibold transition-all ${
+              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
                 activePanel === 'chat'
-                  ? 'bg-white/30 text-white'
-                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
+                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
               }`}
             >
               聊天
             </button>
             <button
               onClick={() => setActivePanel('queue')}
-              className={`px-4 py-1 rounded-full text-sm font-semibold transition-all ${
+              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
                 activePanel === 'queue'
-                  ? 'bg-white/30 text-white'
-                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
+                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
               }`}
             >
               歌曲队列

@@ -11,6 +11,10 @@ interface FuzzyTextProps {
   hoverIntensity?: number;
 }
 
+type FuzzyCanvasElement = HTMLCanvasElement & {
+  cleanupFuzzyText?: () => void;
+};
+
 const FuzzyText: React.FC<FuzzyTextProps> = ({
   children,
   fontSize = "clamp(2rem, 8vw, 8rem)",
@@ -181,7 +185,7 @@ const FuzzyText: React.FC<FuzzyTextProps> = ({
         }
       };
 
-      (canvas as any).cleanupFuzzyText = cleanup;
+      (canvas as FuzzyCanvasElement).cleanupFuzzyText = cleanup;
     };
 
     init();
@@ -189,8 +193,9 @@ const FuzzyText: React.FC<FuzzyTextProps> = ({
     return () => {
       isCancelled = true;
       window.cancelAnimationFrame(animationFrameId);
-      if (canvas && (canvas as any).cleanupFuzzyText) {
-        (canvas as any).cleanupFuzzyText();
+      const fuzzyCanvas = canvas as FuzzyCanvasElement | null;
+      if (fuzzyCanvas?.cleanupFuzzyText) {
+        fuzzyCanvas.cleanupFuzzyText();
       }
     };
   }, [

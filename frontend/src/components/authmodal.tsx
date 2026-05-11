@@ -64,13 +64,11 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             if (!isRegister) {
                 if (data.token) {
                     localStorage.setItem('token', data.token);
-                    console.log('登录成功，token已存储:', data.token);
                 } else {
                     console.warn('登录成功，但未返回 token');
                 }
 
                 // 注意：从后端返回的 user 对象里取用户名
-                const username = data.user?.username || email;
                 if (onLoginSuccess) {
                     localStorage.setItem('user', JSON.stringify(data.user));
                     onLoginSuccess(data.user.username, data.token);
@@ -81,79 +79,97 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             alert(`${isRegister ? '注册' : '登录'}成功：${data.username || username || email}`);
             location.reload();
             onClose();
-        } catch (error) {
+        } catch {
             setError('网络错误，请稍后重试');
         }
     };
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.6)' }}
             onClick={onClose}
         >
             <div
-                className={`bg-[rgba(255,255,255,0.2)] backdrop-blur-lg rounded-lg p-6 w-[26rem] max-w-full transition-all duration-300 ${show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                    }`}
+                className={`transition-all duration-300 ${show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
+                style={{
+                    border: '0.5px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(18,20,26,0.98)',
+                    padding: 24,
+                    width: '26rem',
+                    maxWidth: '90vw'
+                }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex justify-end">
-                    <button
-                        onClick={onClose}
-                        className="text-white hover:text-red-300 text-xl font-bold"
-                    >
-                        ×
-                    </button>
+                {/* Header */}
+                <div className="flex justify-between items-center mb-6"
+                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#3A6BFF' }}>
+                        AUTHENTICATION // <span style={{ color: '#8B8FA3' }}>{isRegister ? 'REGISTER' : 'LOGIN'}</span>
+                    </span>
+                    <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', background: 'none', border: 'none', fontSize: 14 }}>✕</button>
                 </div>
 
-                <div className="space-y-4 mt-2 text-white text-sm">
-                    <div className="text-2xl font-semibold text-center">
-                        {isRegister ? '注册' : '登录'}
+                {/* Form fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {isRegister && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>NICKNAME</span>
+                            <input
+                                style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                                placeholder="输入昵称"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                            />
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>EMAIL</span>
+                        <input
+                            style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                            placeholder="输入邮箱"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
                     </div>
 
-                    {isRegister && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>PASSWORD</span>
                         <input
-                            className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
-                            placeholder="昵称"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                            placeholder="••••••••"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                         />
-                    )}
-
-                    <input
-                        className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
-                        placeholder="邮箱"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                    />
-
-                    <input
-                        className="w-full p-2 bg-white/40 rounded text-black placeholder-white/70"
-                        placeholder="密码"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
+                    </div>
 
                     {error && (
-                        <div className="text-red-300 text-sm text-center">{error}</div>
+                        <div style={{ color: 'rgba(255,80,80,0.7)', fontSize: 11, textAlign: 'center' }}>{error}</div>
                     )}
 
-                    <button
-                        onClick={handleSubmit}
-                        className="w-full bg-white/30 hover:bg-white/50 text-white py-2 rounded mt-2"
-                    >
-                        {isRegister ? '注册' : '登录'}
+                    <button onClick={handleSubmit}
+                            style={{
+                                padding: '8px 0',
+                                border: '0.5px solid rgba(58,107,255,0.3)',
+                                fontSize: '9px',
+                                letterSpacing: '0.3em',
+                                color: '#3A6BFF',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                                width: '100%'
+                            }}>
+                        {isRegister ? 'REGISTER' : 'LOGIN'}
                     </button>
 
                     <div
-                        className="text-center text-sm text-white/70 hover:underline cursor-pointer"
-                        onClick={() => {
-                            setIsRegister(!isRegister);
-                            setError('');
-                        }}
+                        style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)', textAlign: 'center', cursor: 'pointer' }}
+                        onClick={() => { setIsRegister(!isRegister); setError(''); }}
                     >
-                        {isRegister ? '已有账号？登录' : '没有账号？注册'}
+                        {isRegister ? 'ALREADY HAVE AN ACCOUNT? LOGIN' : "NO ACCOUNT? REGISTER"}
                     </div>
                 </div>
             </div>

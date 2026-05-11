@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
@@ -23,11 +18,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} antialiased`}
       >
-        <div className="fixed inset-0 backdrop-blur-[25px] -z-10" />
+        {/* Scanline overlay */}
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100%',
+            height: '1px',
+            background: 'linear-gradient(90deg, transparent, rgba(58,107,255,0.08), transparent)',
+            animation: 'scanline 8s linear infinite',
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+        />
         <div className="relative z-10">
           {children}
         </div>

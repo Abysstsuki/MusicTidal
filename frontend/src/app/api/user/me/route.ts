@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const data = await backendRes.json();
 
     return NextResponse.json(data, { status: backendRes.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ message: '代理请求失败' }, { status: 500 });
   }
 }

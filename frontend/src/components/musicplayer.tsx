@@ -2,8 +2,6 @@
 
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { IconButton, Slider } from '@mui/material';
-import { RefreshRounded, FastForwardRounded, DownloadRounded, VolumeUpRounded, VolumeDownRounded } from '@mui/icons-material';
 import { Song } from '@/types/music';
 import { useMusicContext } from '@/contexts/MusicContext';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
@@ -21,9 +19,8 @@ export default function MusicPlayer() {
     const [url, setUrl] = useState<string>('');
     const [startTime, setStartTime] = useState<number>(0);
     const [showPlayPrompt, setShowPlayPrompt] = useState(false);
+    const [volume, setVolume] = useState(30);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
     // 尝试播放当前音频（供自动播放和用户手势恢复使用）
     const tryPlay = React.useCallback(async () => {
         const audio = audioRef.current;
@@ -229,68 +226,118 @@ export default function MusicPlayer() {
     }, [showPlayPrompt, tryPlay]);
 
     return (
-        <div className="w-full p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full w-110 max-w-full mx-auto relative z-10">
-                {/* 歌曲信息 */}
-                <div className="flex items-center">
-                    <div className="w-24 h-24 overflow-hidden flex-shrink-0 rounded-lg bg-gray-200">
-                        <img alt="music cover" src={currentSong?.prcUrl || '/static/background.jpg'} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="ml-6 min-w-0">
-                        <p className="text-2xl text-gray-500 font-medium">{currentSong ? `由 Abyss 点歌` : '当前无播放'}</p>
-                        <p className="truncate font-bold">{currentSong?.name || '暂无歌曲'}</p>
-                        <p className="truncate text-sm tracking-tight">{currentSong?.artist || ''}</p>
-                    </div>
-                </div>
+    <div className="w-full p-3 relative overflow-hidden">
+        <div className="p-6 h-full w-110 max-w-full mx-auto relative z-10"
+             style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
 
-                {/* 进度条 */}
-                <Slider
-                    aria-label="time-indicator"
-                    size="small"
-                    value={currentPosition}
-                    min={0}
-                    step={1}
-                    max={currentSong?.duration || 500}
-                    disabled
-                    sx={{
-                        '& .MuiSlider-thumb': { display: 'none' },
-                        '& .MuiSlider-rail': { backgroundColor: 'rgba(255,255,255,0.6)' },
-                        '& .MuiSlider-track': { backgroundColor: 'rgba(255,255,255,0.9)' },
-                    }}
-                    className="mt-4 h-1.5"
-                />
-
-                <div className="flex justify-between mt-[-8px]">
-                    <p className="text-xs opacity-50">{formatDuration(currentPosition)}</p>
-                    <p className="text-xs opacity-50">-{formatDuration((currentSong?.duration || 500) - currentPosition)}</p>
-                </div>
-
-                <div className="flex items-center justify-center mt-[-8px] space-x-4">
-                    <IconButton aria-label="sync" className="text-black" onClick={handleSyncAudio}><RefreshRounded fontSize="large" /></IconButton>
-                    <IconButton aria-label="next song" className="text-black" onClick={handleSkipNext}><FastForwardRounded fontSize="large" /></IconButton>
-                    <IconButton aria-label="download song" className="text-black" onClick={handleDownloadSong}><DownloadRounded fontSize="large" /></IconButton>
-                </div>
-
-                <div className="flex items-center justify-between mt-2">
-                    <VolumeDownRounded className="text-gray-500" />
-                    <Slider aria-label="Volume" defaultValue={30} className="w-20" />
-                    <VolumeUpRounded className="text-gray-500" />
-                </div>
-
-                {/* 浏览器阻止自动播放时的点击播放遮罩 */}
-                {showPlayPrompt && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg z-20 cursor-pointer"
-                         onClick={(e) => { e.stopPropagation(); tryPlay(); }}>
-                        <div className="text-white text-center">
-                            <div className="text-5xl mb-2">▶</div>
-                            <div className="text-base font-medium">点击播放</div>
-                            <div className="text-xs mt-1 text-white/60">单击任意位置即可开始播放</div>
-                        </div>
-                    </div>
-                )}
-
-                <audio ref={audioRef} hidden />
+            {/* Header annotation */}
+            <div className="flex justify-between items-center mb-4">
+                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>NOW PLAYING // <span style={{ color: '#3A6BFF' }}>LIVE</span></span>
+                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>
+                    ID: 0x{currentSong?.id?.toString(16).padStart(4,'0') || '----'}
+                </span>
             </div>
+
+            {/* Cover + Info */}
+            <div className="flex gap-5">
+                <div className="relative flex-shrink-0">
+                    <img alt="music cover" src={currentSong?.prcUrl || '/static/background.jpg'}
+                         className="w-24 h-24 object-cover"
+                         style={{ border: '0.5px solid rgba(255,255,255,0.1)' }} />
+                    {/* DataCircle marker */}
+                    <div style={{
+                        position: 'absolute', top: -4, right: -4,
+                        width: 8, height: 8,
+                        border: '0.5px solid rgba(58,107,255,0.3)',
+                        borderRadius: '50%',
+                        background: '#0A0C10'
+                    }} />
+                </div>
+                <div className="flex flex-col justify-center">
+                    <div style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)', marginBottom: 2 }}>TRACK</div>
+                    <div className="text-xl font-semibold text-[#E8E8EF]" style={{ letterSpacing: '-0.01em' }}>
+                        {currentSong?.name || '暂无歌曲'}
+                    </div>
+                    <div className="text-sm text-[#8B8FA3] mt-0.5">
+                        {currentSong?.artist || ''}
+                    </div>
+                </div>
+            </div>
+
+            {/* Progress bar - annotation line style, NOT draggable */}
+            <div className="mt-5">
+                <div className="flex justify-between items-center mb-1">
+                    <span style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>PROGRESS</span>
+                    <span style={{ fontSize: '9px', color: '#8B8FA3' }}>
+                        {currentSong ? Math.round((currentPosition / currentSong.duration) * 100) + '%' : '0%'}
+                    </span>
+                </div>
+                <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+                    <div style={{
+                        width: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
+                        height: '0.5px',
+                        background: '#3A6BFF',
+                        transition: 'width 1s linear'
+                    }} />
+                    <div style={{
+                        position: 'absolute',
+                        left: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
+                        top: '-3px',
+                        width: 6, height: 6,
+                        border: '0.5px solid #3A6BFF',
+                        borderRadius: '50%',
+                        background: '#0A0C10',
+                        transform: 'translateX(-50%)'
+                    }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                    <span style={{ fontSize: '10px', color: '#8B8FA3' }}>{formatDuration(currentPosition)}</span>
+                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>
+                        {currentSong ? formatDuration(currentSong.duration) : '00:00'}
+                    </span>
+                </div>
+            </div>
+
+            {/* Controls - symbol buttons (no MUI) */}
+            <div className="flex items-center justify-center gap-6 mt-5">
+                <button onClick={handleSyncAudio} className="text-[#8B8FA3] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[#E8E8EF] transition-colors">&#x27F3;</button>
+                <button onClick={handleSkipNext} className="text-[#E8E8EF] text-xl cursor-pointer bg-transparent border-none p-1 hover:text-white transition-colors">&#x23ED;</button>
+                <button onClick={handleDownloadSong} className="text-[#8B8FA3] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[#E8E8EF] transition-colors">&#x2B73;</button>
+            </div>
+
+            {/* Volume - draggable */}
+            <div className="flex items-center gap-2 mt-4">
+                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em' }}>VOL</span>
+                <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={volume}
+                    onChange={(e) => { const v = parseInt(e.target.value); setVolume(v); if (audioRef.current) audioRef.current.volume = v / 100; }}
+                    style={{
+                        flex: 1, height: '0.5px',
+                        background: 'rgba(255,255,255,0.08)',
+                        WebkitAppearance: 'none', appearance: 'none',
+                        outline: 'none', cursor: 'pointer'
+                    }}
+                />
+                <span style={{ fontSize: '9px', color: '#8B8FA3', width: 28, textAlign: 'right' }}>{volume}%</span>
+            </div>
+
+            {/* Autoplay overlay - keep exactly as-is */}
+            {showPlayPrompt && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-sm z-20 cursor-pointer"
+                     onClick={(e) => { e.stopPropagation(); tryPlay(); }}>
+                    <div className="text-white text-center">
+                        <div className="text-5xl mb-2">&#x25B6;</div>
+                        <div className="text-base font-medium">点击播放</div>
+                        <div className="text-xs mt-1 text-white/60">单击任意位置即可开始播放</div>
+                    </div>
+                </div>
+            )}
+
+            <audio ref={audioRef} hidden />
         </div>
-    );
+    </div>
+);
 }

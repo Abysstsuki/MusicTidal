@@ -25,23 +25,26 @@ export default function MusicItem({
     };
 
     return (
-        <div className="flex items-center gap-3 bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all">
+        <div className="flex items-center gap-[10px] py-2 border-b border-[rgba(255,255,255,0.04)]">
             {index !== undefined && (
-                <span className="text-white/60 text-xs w-4 text-right">{index + 1}.</span>
+                <span className="text-[10px] text-[#8B8FA3] w-4 text-right tabular-nums">
+                    {String(index + 1).padStart(2, '0')}
+                </span>
             )}
 
             <img
                 src={prcUrl}
                 alt={`${name} 封面`}
-                className="w-10 h-10 rounded object-cover"
+                className="w-7 h-7 object-cover flex-shrink-0"
+                style={{ border: '0.5px solid rgba(255,255,255,0.1)' }}
             />
 
             <div className="flex flex-col flex-1 min-w-0">
-                <div className="text-white text-sm truncate">{name}</div>
-                <div className="text-white/60 text-xs truncate">{artist}</div>
+                <div className="text-[13px] text-[#E8E8EF] truncate">{name}</div>
+                <div className="text-[10px] text-[#8B8FA3] truncate">{artist}</div>
             </div>
 
-            <div className="text-white/50 text-xs w-12 text-right">
+            <div className="text-[10px] text-[rgba(255,255,255,0.3)] tabular-nums w-12 text-right">
                 {formatDuration(duration)}
             </div>
 

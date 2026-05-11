@@ -1,32 +1,79 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --bg-image: url('/static/background.jpg');
+  --bg-primary: #0A0C10;
+  --bg-secondary: #12141A;
+  --bg-panel: rgba(18, 20, 26, 0.95);
+  --text-primary: #E8E8EF;
+  --text-secondary: #8B8FA3;
+  --accent-blue: #3A6BFF;
+  --accent-blue-soft: rgba(58, 107, 255, 0.15);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-light: rgba(255, 255, 255, 0.04);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --bg-image: url('/static/background.jpg');
-  }
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'Inter', monospace;
 }
 
 body {
-  background: 
-    linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)),
-    var(--bg-image) no-repeat center center fixed;
-  color: var(--foreground);
-  background-size: cover;
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
 }
 
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(58, 107, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 107, 255, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@keyframes scanline {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(100vh); }
+}
+
+/* Utility: parametric panel */
+.param-panel {
+  border: 0.5px solid var(--line);
+  background: var(--bg-panel);
+}
+
+/* Utility: annotation text */
+.anno, .anno-blue {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+.anno {
+  color: var(--text-secondary);
+}
+.anno-blue {
+  color: var(--accent-blue);
+}
+
+/* Utility: label-style button */
+.label-btn {
+  padding: 2px 8px;
+  border: 0.5px solid var(--line);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  background: transparent;
+  transition: border-color 0.2s, color 0.2s;
+}
+.label-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+}
+.label-btn-primary {
+  border-color: rgba(58, 107, 255, 0.3);
+  color: var(--accent-blue);
+}
+.label-btn-primary:hover {
+  border-color: rgba(58, 107, 255, 0.6);
+}

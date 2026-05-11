@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-export async function POST(req: NextRequest) {
+export async function POST() {
     try {
         const res = await fetch(`${BACKEND_URL}/api/queue/skipNext`, {
             method: 'POST',

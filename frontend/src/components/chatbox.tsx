@@ -1,6 +1,7 @@
 'use client';
 
 import SimpleBar from 'simplebar-react';
+import type SimpleBarCore from 'simplebar-core';
 import 'simplebar-react/dist/simplebar.min.css';
 import { useEffect, useRef, useState } from 'react';
 
@@ -10,13 +11,18 @@ type Message = {
     text: string;
 };
 
+type ChatHistoryMessage = {
+    username: string;
+    text: string;
+};
+
 export default function ChatBox() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [username, setUsername] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const messageEndRef = useRef<HTMLDivElement>(null);
-    const simpleBarRef = useRef<any>(null); // 引用SimpleBar实例
+    const simpleBarRef = useRef<SimpleBarCore | null>(null);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -47,7 +53,7 @@ export default function ChatBox() {
                         return updated;
                     });
                 } else if (msg.type === 'history') {
-                    const history: Message[] = msg.messages.map((m: any) => ({
+                    const history: Message[] = msg.messages.map((m: ChatHistoryMessage) => ({
                         id: m.username,
                         text: m.text,
                     }));
@@ -71,6 +77,7 @@ export default function ChatBox() {
     useEffect(() => {
         if (simpleBarRef.current) {
             const scrollElement = simpleBarRef.current.getScrollElement();
+            if (!scrollElement) return;
             scrollElement.scrollTop = scrollElement.scrollHeight;
         }
     }, [messages]);
@@ -89,9 +96,9 @@ export default function ChatBox() {
 
     return (
         <div className="flex h-full w-full max-h-[100vh] p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg h-full max-h-full w-110 max-w-full mx-auto relative z-10 flex flex-col">
+            <div className="p-4 h-full max-h-full w-110 max-w-full mx-auto relative z-10 flex flex-col"
+                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
 
-                {/* ✅ SimpleBar 外包一层确保正确撑开 + 防止子容器高度塌陷 */}
                 <div className="flex-1 min-h-0">
                     <SimpleBar
                         style={{ height: '100%', scrollBehavior: 'smooth' }}
@@ -100,11 +107,11 @@ export default function ChatBox() {
                         scrollbarMaxSize={500}
                         ref={simpleBarRef}
                     >
-                        <div className="space-y-3 pr-2">
+                        <div className="space-y-1 pr-2">
                             {messages.map((msg, idx) => (
-                                <div key={idx} className="text-white text-sm">
-                                    <span className="font-semibold text-white/80">{msg.id}:</span>{' '}
-                                    <span className="text-white/90">{msg.text}</span>
+                                <div key={idx} className="text-sm py-1 border-b border-[rgba(255,255,255,0.04)]">
+                                    <span style={{ color: '#3A6BFF', fontWeight: 500 }}>{msg.id}:</span>{' '}
+                                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>{msg.text}</span>
                                 </div>
                             ))}
                             <div ref={messageEndRef} />
@@ -112,28 +119,41 @@ export default function ChatBox() {
                     </SimpleBar>
                 </div>
 
-                {/* ✅ 底部输入框区域 */}
                 <div className="mt-4 flex items-center space-x-2">
                     <input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSend();
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+                        placeholder="输入消息..."
+                        style={{
+                            flex: 1,
+                            border: '0.5px solid rgba(255,255,255,0.1)',
+                            background: 'transparent',
+                            padding: '6px 10px',
+                            color: '#E8E8EF',
+                            fontSize: '12px',
+                            outline: 'none'
                         }}
-                        placeholder="输入消息…"
-                        className="flex-1 px-3 py-2 rounded bg-white/10 text-white placeholder-white/50 outline-none"
                     />
                     <button
                         onClick={handleSend}
-                        className="px-4 py-2 bg-white/20 text-white rounded hover:bg-white/30 transition-all"
                         disabled={!username}
+                        style={{
+                            padding: '4px 12px',
+                            border: '0.5px solid rgba(58,107,255,0.3)',
+                            fontSize: '9px',
+                            letterSpacing: '0.3em',
+                            color: '#3A6BFF',
+                            cursor: !username ? 'not-allowed' : 'pointer',
+                            background: 'transparent',
+                            opacity: !username ? 0.4 : 1
+                        }}
                     >
-                        发送
+                        SEND
                     </button>
                 </div>
             </div>
         </div>
-
     );
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import SimpleBar from 'simplebar-react';
+import type SimpleBarCore from 'simplebar-core';
 import 'simplebar-react/dist/simplebar.min.css';
 import { useMusicContext } from '@/contexts/MusicContext';
 
@@ -56,7 +57,7 @@ export default function MusicLyrics() {
     const [lyrics, setLyrics] = useState<LyricLine[]>([]);
     const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
-    const simpleBarRef = useRef<any>(null);
+    const simpleBarRef = useRef<SimpleBarCore | null>(null);
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isUserScrolling, setIsUserScrolling] = useState(false);
     const [previousSongId, setPreviousSongId] = useState<string | null>(null);
@@ -151,27 +152,44 @@ export default function MusicLyrics() {
 
     return (
         <div className="flex h-full w-full p-3 relative overflow-hidden">
-            <div className="bg-[rgba(255,255,255,0.2)] backdrop-blur-lg p-4 rounded-lg w-160 max-w-full mx-auto relative z-10 py-10">
+            <div className="p-6 w-160 max-w-full mx-auto relative z-10"
+                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+
+                {/* Header */}
+                <div className="flex justify-between items-center mb-4 pb-2"
+                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>
+                        LYRICS // <span style={{ color: '#3A6BFF' }}>SYNC</span>
+                    </span>
+                    <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>LRC_01</span>
+                </div>
+
                 <SimpleBar ref={simpleBarRef} style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
-                    <div className="flex flex-col items-center space-y-10" ref={containerRef}>
+                    <div className="flex flex-col items-center space-y-6" ref={containerRef}>
                         {loading ? (
-                            <p className="text-white text-lg opacity-60">加载歌词中...</p>
+                            <p style={{ color: '#8B8FA3', fontSize: '14px', opacity: 0.6 }}>加载歌词中...</p>
                         ) : lyrics.length === 0 ? (
-                            <p className="text-white text-lg opacity-60">
+                            <p style={{ color: '#8B8FA3', fontSize: '14px', opacity: 0.6 }}>
                                 {currentSong ? '暂无歌词' : '请选择歌曲'}
                             </p>
                         ) : (
                             lyrics.map((line, index) => (
-                                <p
-                                    key={index}
-                                    data-idx={index}
-                                    className={`transition-all duration-300 ${index === currentIndex
-                                            ? 'text-white text-xl font-bold opacity-100 scale-110'
-                                            : 'text-white text-lg opacity-60'
-                                        } max-w-full w-[90%] text-center break-words`}
-                                >
-                                    {line.text || '...'}
-                                </p>
+                                <div key={index} data-idx={index}
+                                     className="flex items-center gap-2 transition-all duration-300"
+                                     style={{ width: '90%', justifyContent: 'center' }}>
+                                    {index === currentIndex && (
+                                        <div style={{ width: 12, height: '0.5px', background: '#3A6BFF', flexShrink: 0 }} />
+                                    )}
+                                    <p className="transition-all duration-300 max-w-full text-center break-words"
+                                       style={{
+                                           fontSize: index === currentIndex ? '18px' : '14px',
+                                           color: index === currentIndex ? '#E8E8EF' : '#8B8FA3',
+                                           fontWeight: index === currentIndex ? 700 : 400,
+                                           opacity: index === currentIndex ? 1 : (Math.abs(index - currentIndex) > 3 ? 0.35 : 0.5)
+                                       }}>
+                                        {line.text}
+                                    </p>
+                                </div>
                             ))
                         )}
                     </div>
