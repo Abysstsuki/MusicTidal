@@ -17,11 +17,11 @@ export default function OnlineUserItem({ id, currentUser }: OnlineUserItemProps)
             style={{
                 padding: '3px 8px',
                 border: isCurrentUser
-                    ? '0.5px solid rgba(58,107,255,0.3)'
-                    : '0.5px solid rgba(255,255,255,0.08)',
+                    ? '1px solid var(--accent-blue-line)'
+                    : '1px solid var(--line)',
                 fontSize: '9px',
                 letterSpacing: '0.1em',
-                color: isCurrentUser ? '#3A6BFF' : '#8B8FA3',
+                color: isCurrentUser ? 'var(--accent-blue)' : 'var(--text-secondary)',
                 background: 'transparent'
             }}
         >

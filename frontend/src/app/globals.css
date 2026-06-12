@@ -1,15 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0A0C10;
-  --bg-secondary: #12141A;
-  --bg-panel: rgba(18, 20, 26, 0.95);
-  --text-primary: #E8E8EF;
-  --text-secondary: #8B8FA3;
-  --accent-blue: #3A6BFF;
-  --accent-blue-soft: rgba(58, 107, 255, 0.15);
-  --line: rgba(255, 255, 255, 0.08);
-  --line-light: rgba(255, 255, 255, 0.04);
+  --bg-primary: #05070D;
+  --bg-secondary: #0E1524;
+  --bg-panel: rgba(15, 23, 38, 0.97);
+  --bg-panel-strong: rgba(20, 30, 49, 0.98);
+  --text-primary: #F4F7FF;
+  --text-secondary: #B8C4DC;
+  --text-muted: #73819B;
+  --accent-blue: #63B3FF;
+  --accent-blue-soft: rgba(99, 179, 255, 0.18);
+  --accent-blue-line: rgba(99, 179, 255, 0.48);
+  --accent-green: #75F0CA;
+  --danger: #FF6B7A;
+  --line: rgba(218, 231, 255, 0.18);
+  --line-light: rgba(218, 231, 255, 0.1);
+  --shadow-panel: 0 22px 60px rgba(0, 0, 0, 0.34);
 }
 
 @theme inline {
@@ -20,6 +26,10 @@
 }
 
 body {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(99, 179, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 82% 78%, rgba(117, 240, 202, 0.08), transparent 28%),
+    linear-gradient(135deg, #05070D 0%, #080C14 48%, #0B111D 100%);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
@@ -27,8 +37,8 @@ body {
 
 .grid-overlay {
   background-image:
-    linear-gradient(rgba(58, 107, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(58, 107, 255, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(99, 179, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 179, 255, 0.08) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -37,10 +47,22 @@ body {
   to { transform: translateY(100vh); }
 }
 
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, -8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 /* Utility: parametric panel */
 .param-panel {
-  border: 0.5px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--bg-panel);
+  box-shadow: var(--shadow-panel);
 }
 
 /* Utility: annotation text */
@@ -58,22 +80,38 @@ body {
 /* Utility: label-style button */
 .label-btn {
   padding: 2px 8px;
-  border: 0.5px solid var(--line);
+  border: 1px solid var(--line);
   font-size: 8px;
   letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
   cursor: pointer;
   background: transparent;
   transition: border-color 0.2s, color 0.2s;
 }
 .label-btn:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.5);
+  border-color: var(--accent-blue-line);
+  color: var(--text-secondary);
 }
 .label-btn-primary {
-  border-color: rgba(58, 107, 255, 0.3);
+  border-color: var(--accent-blue-line);
   color: var(--accent-blue);
 }
 .label-btn-primary:hover {
-  border-color: rgba(58, 107, 255, 0.6);
+  border-color: var(--accent-blue);
+}
+
+.home-tab {
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--line-light);
+}
+
+.home-tab:hover {
+  color: var(--text-secondary);
+  border-bottom-color: var(--line);
+}
+
+.home-tab-active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  text-shadow: 0 0 18px rgba(99, 179, 255, 0.34);
 }

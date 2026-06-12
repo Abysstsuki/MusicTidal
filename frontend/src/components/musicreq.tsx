@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MusicItem from './modelItem/MusicItem';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
@@ -12,13 +12,41 @@ interface MusicReqProps {
 
 const PAGE_SIZE = 10;
 
+type ToastState = {
+    title: string;
+    message: string;
+    tone: 'success' | 'error';
+};
+
 export default function MusicReq({ isVisible }: MusicReqProps) {
     const [searchInput, setSearchInput] = useState('');
     const [songs, setSongs] = useState<Song[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(false);
+    const [toast, setToast] = useState<ToastState | null>(null);
     const lastKeyword = useRef('');
+    const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const showToast = (nextToast: ToastState) => {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
+
+        setToast(nextToast);
+        toastTimerRef.current = setTimeout(() => {
+            setToast(null);
+            toastTimerRef.current = null;
+        }, 2600);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+            }
+        };
+    }, []);
 
     const handleEnqueue = async (song: Song) => {
         try {
@@ -33,10 +61,18 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                 throw new Error(err.error || '加入队列失败');
             }
 
-            alert(`《${song.name}》已加入队列`);
+            showToast({
+                title: 'TRACK ADDED',
+                message: song.name,
+                tone: 'success',
+            });
         } catch (err) {
             console.error('点歌失败', err);
-            alert('点歌失败，请稍后重试');
+            showToast({
+                title: 'ADD FAILED',
+                message: err instanceof Error ? err.message : 'Please try again later',
+                tone: 'error',
+            });
         }
     };
 
@@ -90,8 +126,44 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
 
     return (
     <div className={`flex h-full w-full p-3 relative overflow-hidden ${isVisible ? '' : 'hidden'}`}>
+        {toast && (
+            <div
+                role="status"
+                aria-live="polite"
+                className="fixed right-6 top-6 z-[9998] max-w-[320px]"
+                style={{
+                    border: `1px solid ${toast.tone === 'success' ? 'var(--accent-blue-line)' : 'rgba(255,107,122,0.45)'}`,
+                    background: 'var(--bg-panel-strong)',
+                    boxShadow: '0 18px 45px rgba(0,0,0,0.38)',
+                    padding: '12px 14px',
+                    backdropFilter: 'blur(18px)',
+                    animation: 'toast-in 220ms ease-out',
+                }}
+            >
+                <div
+                    style={{
+                        fontSize: '9px',
+                        letterSpacing: '0.28em',
+                        color: toast.tone === 'success' ? 'var(--accent-blue)' : 'var(--danger)',
+                        marginBottom: 6,
+                    }}
+                >
+                    {toast.title}
+                </div>
+                <div
+                    className="truncate"
+                    style={{
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        lineHeight: 1.35,
+                    }}
+                >
+                    {toast.message}
+                </div>
+            </div>
+        )}
         <div className="p-6 w-full max-w-full mx-auto relative z-10 flex flex-col"
-             style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+             style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Search bar */}
             <div className="mb-4 flex space-x-2">
@@ -103,10 +175,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                     onKeyDown={handleKeyDown}
                     style={{
                         flex: 1,
-                        border: '0.5px solid rgba(255,255,255,0.1)',
+                        border: '1px solid var(--line)',
                         background: 'transparent',
                         padding: '6px 10px',
-                        color: '#E8E8EF',
+                        color: 'var(--text-primary)',
                         fontSize: '11px',
                         outline: 'none'
                     }}
@@ -116,10 +188,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                     disabled={loading}
                     style={{
                         padding: '6px 14px',
-                        border: '0.5px solid rgba(58,107,255,0.3)',
+                        border: '1px solid var(--accent-blue-line)',
                         fontSize: '9px',
                         letterSpacing: '0.3em',
-                        color: '#3A6BFF',
+                        color: 'var(--accent-blue)',
                         background: 'transparent',
                         cursor: loading ? 'not-allowed' : 'pointer',
                         opacity: loading ? 0.5 : 1
@@ -134,10 +206,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                 <SimpleBar style={{ maxHeight: '100%' }} autoHide={true}>
                     <div className="space-y-1">
                         {!hasSearched && !loading && (
-                            <p className="text-center py-8" style={{ color: '#8B8FA3', fontSize: '13px', opacity: 0.5 }}>请输入关键词搜索歌曲</p>
+                            <p className="text-center py-8" style={{ color: 'var(--text-secondary)', fontSize: '13px', opacity: 0.5 }}>请输入关键词搜索歌曲</p>
                         )}
                         {hasSearched && songs.length === 0 && !loading && (
-                            <p className="text-center py-8" style={{ color: '#8B8FA3', fontSize: '13px', opacity: 0.5 }}>未找到结果</p>
+                            <p className="text-center py-8" style={{ color: 'var(--text-secondary)', fontSize: '13px', opacity: 0.5 }}>未找到结果</p>
                         )}
                         {songs.map((song, index) => (
                             <MusicItem
@@ -152,10 +224,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                                 <button
                                     style={{
                                         padding: '2px 8px',
-                                        border: '0.5px solid rgba(58,107,255,0.3)',
+                                        border: '1px solid var(--accent-blue-line)',
                                         fontSize: '8px',
                                         letterSpacing: '0.2em',
-                                        color: '#3A6BFF',
+                                        color: 'var(--accent-blue)',
                                         background: 'transparent',
                                         cursor: 'pointer'
                                     }}
@@ -176,10 +248,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                             disabled={currentPage === 1}
                             style={{
                                 padding: '2px 6px',
-                                border: '0.5px solid rgba(255,255,255,0.1)',
+                                border: '1px solid var(--line)',
                                 fontSize: '9px',
                                 letterSpacing: '0.2em',
-                                color: currentPage === 1 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.3)',
+                                color: currentPage === 1 ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
                                 background: 'transparent',
                                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
                             }}>
@@ -189,26 +261,26 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                             disabled={currentPage === 1}
                             style={{
                                 padding: '4px 8px',
-                                border: '0.5px solid rgba(255,255,255,0.1)',
+                                border: '1px solid var(--line)',
                                 fontSize: '9px',
                                 letterSpacing: '0.2em',
-                                color: currentPage === 1 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.3)',
+                                color: currentPage === 1 ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
                                 background: 'transparent',
                                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
                             }}>
                         PREV
                     </button>
-                    <span style={{ fontSize: '9px', color: '#8B8FA3', padding: '0 8px' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--text-secondary)', padding: '0 8px' }}>
                         PAGE {currentPage} / {totalPages}
                     </span>
                     <button onClick={() => goToPage(currentPage + 1)}
                             disabled={currentPage === totalPages}
                             style={{
                                 padding: '4px 8px',
-                                border: '0.5px solid rgba(255,255,255,0.1)',
+                                border: '1px solid var(--line)',
                                 fontSize: '9px',
                                 letterSpacing: '0.2em',
-                                color: currentPage === totalPages ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.3)',
+                                color: currentPage === totalPages ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
                                 background: 'transparent',
                                 cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
                             }}>
@@ -218,10 +290,10 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                             disabled={currentPage === totalPages}
                             style={{
                                 padding: '2px 6px',
-                                border: '0.5px solid rgba(255,255,255,0.1)',
+                                border: '1px solid var(--line)',
                                 fontSize: '9px',
                                 letterSpacing: '0.2em',
-                                color: currentPage === totalPages ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.3)',
+                                color: currentPage === totalPages ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
                                 background: 'transparent',
                                 cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
                             }}>

@@ -153,23 +153,23 @@ export default function MusicLyrics() {
     return (
         <div className="flex h-full w-full p-3 relative overflow-hidden">
             <div className="p-6 w-160 max-w-full mx-auto relative z-10"
-                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+                 style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4 pb-2"
-                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>
-                        LYRICS // <span style={{ color: '#3A6BFF' }}>SYNC</span>
+                     style={{ borderBottom: '1px solid var(--line-light)' }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>
+                        LYRICS // <span style={{ color: 'var(--accent-blue)' }}>SYNC</span>
                     </span>
-                    <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>LRC_01</span>
+                    <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(184,196,220,0.55)' }}>LRC_01</span>
                 </div>
 
                 <SimpleBar ref={simpleBarRef} style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
                     <div className="flex flex-col items-center space-y-6" ref={containerRef}>
                         {loading ? (
-                            <p style={{ color: '#8B8FA3', fontSize: '14px', opacity: 0.6 }}>加载歌词中...</p>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', opacity: 0.6 }}>加载歌词中...</p>
                         ) : lyrics.length === 0 ? (
-                            <p style={{ color: '#8B8FA3', fontSize: '14px', opacity: 0.6 }}>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', opacity: 0.6 }}>
                                 {currentSong ? '暂无歌词' : '请选择歌曲'}
                             </p>
                         ) : (
@@ -178,12 +178,12 @@ export default function MusicLyrics() {
                                      className="flex items-center gap-2 transition-all duration-300"
                                      style={{ width: '90%', justifyContent: 'center' }}>
                                     {index === currentIndex && (
-                                        <div style={{ width: 12, height: '0.5px', background: '#3A6BFF', flexShrink: 0 }} />
+                                        <div style={{ width: 12, height: '0.5px', background: 'var(--accent-blue)', flexShrink: 0 }} />
                                     )}
                                     <p className="transition-all duration-300 max-w-full text-center break-words"
                                        style={{
                                            fontSize: index === currentIndex ? '18px' : '14px',
-                                           color: index === currentIndex ? '#E8E8EF' : '#8B8FA3',
+                                           color: index === currentIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
                                            fontWeight: index === currentIndex ? 700 : 400,
                                            opacity: index === currentIndex ? 1 : (Math.abs(index - currentIndex) > 3 ? 0.35 : 0.5)
                                        }}>

@@ -84,20 +84,20 @@ export default function MusicQueue() {
   return (
     <div className="w-full h-full p-3 relative overflow-hidden">
         <div className="p-4 h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto"
-             style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+             style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Header */}
             <div className="flex justify-between items-center pb-2 mb-3"
-                 style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>QUEUE LIST</span>
-                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>
+                 style={{ borderBottom: '1px solid var(--line-light)' }}>
+                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>QUEUE LIST</span>
+                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(184,196,220,0.55)' }}>
                     {queue.length} ITEMS
                 </span>
             </div>
 
             {queue.length === 0 ? (
                 <div className="py-6 text-center">
-                    <p style={{ color: '#8B8FA3', fontSize: '14px' }}>当前队列为空</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>当前队列为空</p>
                 </div>
             ) : (
                 queue.map((song, index) => (
@@ -116,10 +116,10 @@ export default function MusicQueue() {
                                 onClick={() => moveToTop(song.instanceId)}
                                 style={{
                                     padding: '1px 5px',
-                                    border: '0.5px solid rgba(255,255,255,0.1)',
+                                    border: '1px solid var(--line)',
                                     fontSize: '8px',
                                     letterSpacing: '0.2em',
-                                    color: 'rgba(255,255,255,0.25)',
+                                    color: 'var(--text-muted)',
                                     background: 'transparent',
                                     cursor: 'pointer'
                                 }}
@@ -131,10 +131,10 @@ export default function MusicQueue() {
                                 onClick={() => removeFromQueue(song.instanceId)}
                                 style={{
                                     padding: '1px 5px',
-                                    border: '0.5px solid rgba(255,255,255,0.1)',
+                                    border: '1px solid var(--line)',
                                     fontSize: '8px',
                                     letterSpacing: '0.2em',
-                                    color: 'rgba(255,255,255,0.25)',
+                                    color: 'var(--text-muted)',
                                     background: 'transparent',
                                     cursor: 'pointer'
                                 }}

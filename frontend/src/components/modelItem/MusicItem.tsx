@@ -25,9 +25,9 @@ export default function MusicItem({
     };
 
     return (
-        <div className="flex items-center gap-[10px] py-2 border-b border-[rgba(255,255,255,0.04)]">
+        <div className="flex items-center gap-[10px] py-2 border-b border-[var(--line-light)]">
             {index !== undefined && (
-                <span className="text-[10px] text-[#8B8FA3] w-4 text-right tabular-nums">
+                <span className="text-[10px] text-[var(--text-secondary)] w-4 text-right tabular-nums">
                     {String(index + 1).padStart(2, '0')}
                 </span>
             )}
@@ -36,15 +36,15 @@ export default function MusicItem({
                 src={prcUrl}
                 alt={`${name} 封面`}
                 className="w-7 h-7 object-cover flex-shrink-0"
-                style={{ border: '0.5px solid rgba(255,255,255,0.1)' }}
+                style={{ border: '1px solid var(--line)' }}
             />
 
             <div className="flex flex-col flex-1 min-w-0">
-                <div className="text-[13px] text-[#E8E8EF] truncate">{name}</div>
-                <div className="text-[10px] text-[#8B8FA3] truncate">{artist}</div>
+                <div className="text-[13px] text-[var(--text-primary)] truncate">{name}</div>
+                <div className="text-[10px] text-[var(--text-secondary)] truncate">{artist}</div>
             </div>
 
-            <div className="text-[10px] text-[rgba(255,255,255,0.3)] tabular-nums w-12 text-right">
+            <div className="text-[10px] text-[var(--text-muted)] tabular-nums w-12 text-right">
                 {formatDuration(duration)}
             </div>
 

@@ -228,12 +228,12 @@ export default function MusicPlayer() {
     return (
     <div className="w-full p-3 relative overflow-hidden">
         <div className="p-6 h-full w-110 max-w-full mx-auto relative z-10"
-             style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+             style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Header annotation */}
             <div className="flex justify-between items-center mb-4">
-                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>NOW PLAYING // <span style={{ color: '#3A6BFF' }}>LIVE</span></span>
-                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.2)' }}>
+                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>NOW PLAYING // <span style={{ color: 'var(--accent-blue)' }}>LIVE</span></span>
+                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(184,196,220,0.55)' }}>
                     ID: 0x{currentSong?.id?.toString(16).padStart(4,'0') || '----'}
                 </span>
             </div>
@@ -243,22 +243,22 @@ export default function MusicPlayer() {
                 <div className="relative flex-shrink-0">
                     <img alt="music cover" src={currentSong?.prcUrl || '/static/background.jpg'}
                          className="w-24 h-24 object-cover"
-                         style={{ border: '0.5px solid rgba(255,255,255,0.1)' }} />
+                         style={{ border: '1px solid var(--line)' }} />
                     {/* DataCircle marker */}
                     <div style={{
                         position: 'absolute', top: -4, right: -4,
                         width: 8, height: 8,
-                        border: '0.5px solid rgba(58,107,255,0.3)',
+                        border: '1px solid var(--accent-blue-line)',
                         borderRadius: '50%',
-                        background: '#0A0C10'
+                        background: 'var(--bg-primary)'
                     }} />
                 </div>
                 <div className="flex flex-col justify-center">
-                    <div style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)', marginBottom: 2 }}>TRACK</div>
-                    <div className="text-xl font-semibold text-[#E8E8EF]" style={{ letterSpacing: '-0.01em' }}>
+                    <div style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'var(--text-muted)', marginBottom: 2 }}>TRACK</div>
+                    <div className="text-xl font-semibold text-[var(--text-primary)]" style={{ letterSpacing: '-0.01em' }}>
                         {currentSong?.name || '暂无歌曲'}
                     </div>
-                    <div className="text-sm text-[#8B8FA3] mt-0.5">
+                    <div className="text-sm text-[var(--text-secondary)] mt-0.5">
                         {currentSong?.artist || ''}
                     </div>
                 </div>
@@ -267,16 +267,16 @@ export default function MusicPlayer() {
             {/* Progress bar - annotation line style, NOT draggable */}
             <div className="mt-5">
                 <div className="flex justify-between items-center mb-1">
-                    <span style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>PROGRESS</span>
-                    <span style={{ fontSize: '9px', color: '#8B8FA3' }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'var(--text-muted)' }}>PROGRESS</span>
+                    <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>
                         {currentSong ? Math.round((currentPosition / currentSong.duration) * 100) + '%' : '0%'}
                     </span>
                 </div>
-                <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+                <div style={{ height: '0.5px', background: 'var(--line)', position: 'relative' }}>
                     <div style={{
                         width: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
                         height: '0.5px',
-                        background: '#3A6BFF',
+                        background: 'var(--accent-blue)',
                         transition: 'width 1s linear'
                     }} />
                     <div style={{
@@ -284,15 +284,15 @@ export default function MusicPlayer() {
                         left: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
                         top: '-3px',
                         width: 6, height: 6,
-                        border: '0.5px solid #3A6BFF',
+                        border: '0.5px solid var(--accent-blue)',
                         borderRadius: '50%',
-                        background: '#0A0C10',
+                        background: 'var(--bg-primary)',
                         transform: 'translateX(-50%)'
                     }} />
                 </div>
                 <div className="flex justify-between mt-1">
-                    <span style={{ fontSize: '10px', color: '#8B8FA3' }}>{formatDuration(currentPosition)}</span>
-                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{formatDuration(currentPosition)}</span>
+                    <span style={{ fontSize: '10px', color: 'rgba(184,196,220,0.55)' }}>
                         {currentSong ? formatDuration(currentSong.duration) : '00:00'}
                     </span>
                 </div>
@@ -300,14 +300,14 @@ export default function MusicPlayer() {
 
             {/* Controls - symbol buttons (no MUI) */}
             <div className="flex items-center justify-center gap-6 mt-5">
-                <button onClick={handleSyncAudio} className="text-[#8B8FA3] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[#E8E8EF] transition-colors">&#x27F3;</button>
-                <button onClick={handleSkipNext} className="text-[#E8E8EF] text-xl cursor-pointer bg-transparent border-none p-1 hover:text-white transition-colors">&#x23ED;</button>
-                <button onClick={handleDownloadSong} className="text-[#8B8FA3] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[#E8E8EF] transition-colors">&#x2B73;</button>
+                <button onClick={handleSyncAudio} className="text-[var(--text-secondary)] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[var(--text-primary)] transition-colors">&#x27F3;</button>
+                <button onClick={handleSkipNext} className="text-[var(--text-primary)] text-xl cursor-pointer bg-transparent border-none p-1 hover:text-white transition-colors">&#x23ED;</button>
+                <button onClick={handleDownloadSong} className="text-[var(--text-secondary)] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[var(--text-primary)] transition-colors">&#x2B73;</button>
             </div>
 
             {/* Volume - draggable */}
             <div className="flex items-center gap-2 mt-4">
-                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em' }}>VOL</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.1em' }}>VOL</span>
                 <input
                     type="range"
                     min="0"
@@ -316,12 +316,12 @@ export default function MusicPlayer() {
                     onChange={(e) => { const v = parseInt(e.target.value); setVolume(v); if (audioRef.current) audioRef.current.volume = v / 100; }}
                     style={{
                         flex: 1, height: '0.5px',
-                        background: 'rgba(255,255,255,0.08)',
+                        background: 'var(--line)',
                         WebkitAppearance: 'none', appearance: 'none',
                         outline: 'none', cursor: 'pointer'
                     }}
                 />
-                <span style={{ fontSize: '9px', color: '#8B8FA3', width: 28, textAlign: 'right' }}>{volume}%</span>
+                <span style={{ fontSize: '9px', color: 'var(--text-secondary)', width: 28, textAlign: 'right' }}>{volume}%</span>
             </div>
 
             {/* Autoplay overlay - keep exactly as-is */}

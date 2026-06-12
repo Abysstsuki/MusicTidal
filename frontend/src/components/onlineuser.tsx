@@ -76,13 +76,13 @@ export default function OnlineUser() {
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
             <div className="w-full h-full p-4 overflow-y-auto"
-                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+                 style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 {/* Header */}
                 <div className="flex justify-between items-center pb-2 mb-3"
-                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>ONLINE USERS</span>
-                    <span style={{ fontSize: '9px', color: '#3A6BFF' }}>{onlineUsers.length}</span>
+                     style={{ borderBottom: '1px solid var(--line-light)' }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>ONLINE USERS</span>
+                    <span style={{ fontSize: '9px', color: 'var(--accent-blue)' }}>{onlineUsers.length}</span>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
@@ -94,7 +94,7 @@ export default function OnlineUser() {
                 </div>
 
                 {onlineUsers.length === 0 && (
-                    <p style={{ color: '#8B8FA3', fontSize: '12px', fontStyle: 'italic', marginTop: 16, opacity: 0.6 }}>暂无在线用户</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '12px', fontStyle: 'italic', marginTop: 16, opacity: 0.6 }}>暂无在线用户</p>
                 )}
             </div>
         </div>

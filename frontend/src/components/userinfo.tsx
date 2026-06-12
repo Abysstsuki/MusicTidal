@@ -73,26 +73,26 @@ export default function UserInfo() {
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
             <div className="p-6 w-160 max-w-full mx-auto relative z-10 flex flex-col items-center space-y-6"
-                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+                 style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 {/* DataCircle avatar */}
                 <div style={{
                     width: 56, height: 56,
-                    border: '0.5px solid rgba(58,107,255,0.2)',
+                    border: '1px solid rgba(99,179,255,0.3)',
                     borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                    <div style={{ width: 8, height: 8, background: '#3A6BFF', borderRadius: '50%', opacity: 0.5 }} />
+                    <div style={{ width: 8, height: 8, background: 'var(--accent-blue)', borderRadius: '50%', opacity: 0.5 }} />
                 </div>
 
                 {/* Signal status */}
                 <div className="text-center">
-                    <div style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#8B8FA3' }}>SIGNAL STATUS</div>
-                    <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: '#8B8FA3', marginTop: 4 }}>
+                    <div style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>SIGNAL STATUS</div>
+                    <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: 'var(--text-secondary)', marginTop: 4 }}>
                         {user.isLoggedIn ? (
-                            <>CONNECTED / <span style={{ color: '#3A6BFF' }}>{user.name}</span></>
+                            <>CONNECTED / <span style={{ color: 'var(--accent-blue)' }}>{user.name}</span></>
                         ) : (
-                            <>OFFLINE / <span style={{ color: '#3A6BFF' }}>LOGIN</span></>
+                            <>OFFLINE / <span style={{ color: 'var(--accent-blue)' }}>LOGIN</span></>
                         )}
                     </div>
                 </div>
@@ -105,10 +105,10 @@ export default function UserInfo() {
                                 <button onClick={() => setShowBindModal(true)}
                                         style={{
                                             padding: '6px 16px',
-                                            border: '0.5px solid rgba(58,107,255,0.3)',
+                                            border: '1px solid var(--accent-blue-line)',
                                             fontSize: '9px',
                                             letterSpacing: '0.3em',
-                                            color: '#3A6BFF',
+                                            color: 'var(--accent-blue)',
                                             background: 'transparent',
                                             cursor: 'pointer',
                                             textAlign: 'center'
@@ -119,10 +119,10 @@ export default function UserInfo() {
                                 <button onClick={handleUnbind}
                                         style={{
                                             padding: '6px 16px',
-                                            border: '0.5px solid rgba(255,255,255,0.1)',
+                                            border: '1px solid var(--line)',
                                             fontSize: '9px',
                                             letterSpacing: '0.3em',
-                                            color: 'rgba(255,255,255,0.3)',
+                                            color: 'var(--text-muted)',
                                             background: 'transparent',
                                             cursor: 'pointer',
                                             textAlign: 'center'
@@ -133,10 +133,10 @@ export default function UserInfo() {
                             <button onClick={handleLogout}
                                     style={{
                                         padding: '6px 16px',
-                                        border: '0.5px solid rgba(255,80,80,0.3)',
+                                        border: '1px solid rgba(255,107,122,0.45)',
                                         fontSize: '9px',
                                         letterSpacing: '0.3em',
-                                        color: 'rgba(255,80,80,0.6)',
+                                        color: 'var(--danger)',
                                         background: 'transparent',
                                         cursor: 'pointer',
                                         textAlign: 'center'
@@ -148,10 +148,10 @@ export default function UserInfo() {
                         <button onClick={() => setShowAuthModal(true)}
                                 style={{
                                     padding: '6px 16px',
-                                    border: '0.5px solid rgba(58,107,255,0.3)',
+                                    border: '1px solid var(--accent-blue-line)',
                                     fontSize: '9px',
                                     letterSpacing: '0.3em',
-                                    color: '#3A6BFF',
+                                    color: 'var(--accent-blue)',
                                     background: 'transparent',
                                     cursor: 'pointer',
                                     textAlign: 'center'

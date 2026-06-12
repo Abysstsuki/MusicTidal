@@ -29,7 +29,7 @@ export default function RootLayout({
             inset: 0,
             width: '100%',
             height: '1px',
-            background: 'linear-gradient(90deg, transparent, rgba(58,107,255,0.08), transparent)',
+            background: 'linear-gradient(90deg, transparent, rgba(99,179,255,0.16), transparent)',
             animation: 'scanline 8s linear infinite',
             pointerEvents: 'none',
             zIndex: 9999,

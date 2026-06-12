@@ -93,8 +93,8 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             <div
                 className={`transition-all duration-300 ${show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
                 style={{
-                    border: '0.5px solid rgba(255,255,255,0.08)',
-                    background: 'rgba(18,20,26,0.98)',
+                    border: '1px solid var(--line)',
+                    background: 'var(--bg-panel-strong)',
                     padding: 24,
                     width: '26rem',
                     maxWidth: '90vw'
@@ -103,20 +103,20 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             >
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6"
-                     style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
-                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#3A6BFF' }}>
-                        AUTHENTICATION // <span style={{ color: '#8B8FA3' }}>{isRegister ? 'REGISTER' : 'LOGIN'}</span>
+                     style={{ borderBottom: '1px solid var(--line-light)', paddingBottom: 12 }}>
+                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--accent-blue)' }}>
+                        AUTHENTICATION // <span style={{ color: 'var(--text-secondary)' }}>{isRegister ? 'REGISTER' : 'LOGIN'}</span>
                     </span>
-                    <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', background: 'none', border: 'none', fontSize: 14 }}>✕</button>
+                    <button onClick={onClose} style={{ color: 'rgba(184,196,220,0.55)', cursor: 'pointer', background: 'none', border: 'none', fontSize: 14 }}>✕</button>
                 </div>
 
                 {/* Form fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {isRegister && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>NICKNAME</span>
+                            <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>NICKNAME</span>
                             <input
-                                style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                                style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
                                 placeholder="输入昵称"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
@@ -125,9 +125,9 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>EMAIL</span>
+                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>EMAIL</span>
                         <input
-                            style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                            style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
                             placeholder="输入邮箱"
                             type="email"
                             value={email}
@@ -136,9 +136,9 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)' }}>PASSWORD</span>
+                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>PASSWORD</span>
                         <input
-                            style={{ border: '0.5px solid rgba(255,255,255,0.1)', background: 'transparent', padding: '6px 10px', color: '#E8E8EF', fontSize: 12, outline: 'none' }}
+                            style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
                             placeholder="••••••••"
                             type="password"
                             value={password}
@@ -153,10 +153,10 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     <button onClick={handleSubmit}
                             style={{
                                 padding: '8px 0',
-                                border: '0.5px solid rgba(58,107,255,0.3)',
+                                border: '1px solid var(--accent-blue-line)',
                                 fontSize: '9px',
                                 letterSpacing: '0.3em',
-                                color: '#3A6BFF',
+                                color: 'var(--accent-blue)',
                                 background: 'transparent',
                                 cursor: 'pointer',
                                 textAlign: 'center',
@@ -166,7 +166,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     </button>
 
                     <div
-                        style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)', textAlign: 'center', cursor: 'pointer' }}
+                        style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'var(--text-muted)', textAlign: 'center', cursor: 'pointer' }}
                         onClick={() => { setIsRegister(!isRegister); setError(''); }}
                     >
                         {isRegister ? 'ALREADY HAVE AN ACCOUNT? LOGIN' : "NO ACCOUNT? REGISTER"}

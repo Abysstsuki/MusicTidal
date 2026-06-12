@@ -19,13 +19,13 @@ function BackgroundLayer() {
             {currentSong?.prcUrl && (
                 <div
                     style={{
-                        position: 'fixed', inset: 0, zIndex: -3,
+                        position: 'fixed', inset: 0, zIndex: -2,
                         backgroundImage: `url(${currentSong.prcUrl})`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                         filter: 'blur(40px) saturate(1.2)',
                         transform: 'scale(1.1)',
-                        opacity: 0.25,
+                        opacity: 0.42,
                         transition: 'background-image 1s ease',
                         pointerEvents: 'none',
                     }}
@@ -35,7 +35,8 @@ function BackgroundLayer() {
             <div
                 className="grid-overlay"
                 style={{
-                    position: 'fixed', inset: 0, zIndex: -1,
+                    position: 'fixed', inset: 0, zIndex: currentSong?.prcUrl ? -3 : -1,
+                    opacity: currentSong?.prcUrl ? 0.18 : 0.85,
                     pointerEvents: 'none',
                 }}
             />
@@ -46,6 +47,10 @@ function BackgroundLayer() {
 export default function Home() {
   const [activePanel, setActivePanel] = useState<'chat' | 'queue'>('chat');
   const [leftPanel, setLeftPanel] = useState<'info' | 'request'>('info');
+  const tabClass = (isActive: boolean) =>
+    `text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all home-tab ${
+      isActive ? 'home-tab-active' : ''
+    }`;
 
   return (
     <MusicProvider>
@@ -72,21 +77,13 @@ export default function Home() {
           <div className="flex justify-center space-x-4 mb-2">
             <button
               onClick={() => setLeftPanel('info')}
-              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
-                leftPanel === 'info'
-                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
-                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
-              }`}
+              className={tabClass(leftPanel === 'info')}
             >
               在线信息
             </button>
             <button
               onClick={() => setLeftPanel('request')}
-              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
-                leftPanel === 'request'
-                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
-                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
-              }`}
+              className={tabClass(leftPanel === 'request')}
             >
               点歌
             </button>
@@ -125,21 +122,13 @@ export default function Home() {
           <div className="flex justify-center space-x-4 mb-2">
             <button
               onClick={() => setActivePanel('chat')}
-              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
-                activePanel === 'chat'
-                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
-                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
-              }`}
+              className={tabClass(activePanel === 'chat')}
             >
               聊天
             </button>
             <button
               onClick={() => setActivePanel('queue')}
-              className={`text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all ${
-                activePanel === 'queue'
-                  ? 'text-[#3A6BFF] border-b border-[#3A6BFF]'
-                  : 'text-[rgba(255,255,255,0.3)] border-b border-[rgba(255,255,255,0.08)]'
-              }`}
+              className={tabClass(activePanel === 'queue')}
             >
               歌曲队列
             </button>

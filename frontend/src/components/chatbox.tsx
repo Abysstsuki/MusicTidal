@@ -97,7 +97,7 @@ export default function ChatBox() {
     return (
         <div className="flex h-full w-full max-h-[100vh] p-3 relative overflow-hidden">
             <div className="p-4 h-full max-h-full w-110 max-w-full mx-auto relative z-10 flex flex-col"
-                 style={{ border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(18,20,26,0.95)' }}>
+                 style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 <div className="flex-1 min-h-0">
                     <SimpleBar
@@ -109,9 +109,9 @@ export default function ChatBox() {
                     >
                         <div className="space-y-1 pr-2">
                             {messages.map((msg, idx) => (
-                                <div key={idx} className="text-sm py-1 border-b border-[rgba(255,255,255,0.04)]">
-                                    <span style={{ color: '#3A6BFF', fontWeight: 500 }}>{msg.id}:</span>{' '}
-                                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>{msg.text}</span>
+                                <div key={idx} className="text-sm py-1 border-b border-[var(--line-light)]">
+                                    <span style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>{msg.id}:</span>{' '}
+                                    <span style={{ color: 'var(--text-secondary)' }}>{msg.text}</span>
                                 </div>
                             ))}
                             <div ref={messageEndRef} />
@@ -127,10 +127,10 @@ export default function ChatBox() {
                         placeholder="输入消息..."
                         style={{
                             flex: 1,
-                            border: '0.5px solid rgba(255,255,255,0.1)',
+                            border: '1px solid var(--line)',
                             background: 'transparent',
                             padding: '6px 10px',
-                            color: '#E8E8EF',
+                            color: 'var(--text-primary)',
                             fontSize: '12px',
                             outline: 'none'
                         }}
@@ -140,10 +140,10 @@ export default function ChatBox() {
                         disabled={!username}
                         style={{
                             padding: '4px 12px',
-                            border: '0.5px solid rgba(58,107,255,0.3)',
+                            border: '1px solid var(--accent-blue-line)',
                             fontSize: '9px',
                             letterSpacing: '0.3em',
-                            color: '#3A6BFF',
+                            color: 'var(--accent-blue)',
                             cursor: !username ? 'not-allowed' : 'pointer',
                             background: 'transparent',
                             opacity: !username ? 0.4 : 1
