@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import MusicItem from './modelItem/MusicItem';
 import { Song } from '@/types/music';
 
+import { BACKEND_URL } from '@/lib/api';
+
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 
 interface SongWithInstanceId extends Song {
@@ -16,7 +18,7 @@ export default function MusicQueue() {
 
   const fetchQueue = async () => {
     try {
-      const res = await fetch('/api/song/queueList');
+      const res = await fetch(`${BACKEND_URL}/api/queue/list`);
       const data = await res.json();
       setQueue(data.queue); // ✅ 后端已含 instanceId
     } catch (err) {
@@ -26,7 +28,7 @@ export default function MusicQueue() {
 
   const moveToTop = async (instanceId: number) => {
     try {
-      await fetch('/api/song/queueTop', {
+      await fetch(`${BACKEND_URL}/api/queue/moveTop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceId }),
@@ -38,7 +40,7 @@ export default function MusicQueue() {
 
   const removeFromQueue = async (instanceId: number) => {
     try {
-      await fetch('/api/song/queueRemove', {
+      await fetch(`${BACKEND_URL}/api/queue/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceId }),

@@ -5,6 +5,7 @@ import MusicItem from './modelItem/MusicItem';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 import type { Song, SongSearchResponse } from '@/types/music';
+import { BACKEND_URL } from '@/lib/api';
 
 interface MusicReqProps {
     isVisible: boolean;
@@ -50,7 +51,7 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
 
     const handleEnqueue = async (song: Song) => {
         try {
-            const res = await fetch('/api/song/queueAdd', {
+            const res = await fetch(`${BACKEND_URL}/api/queue/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ song }),
@@ -81,7 +82,7 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
         try {
             const offset = (page - 1) * PAGE_SIZE;
             const res = await fetch(
-                `/api/song/search?keywords=${encodeURIComponent(keyword)}&offset=${offset}&limit=${PAGE_SIZE}`
+                `${BACKEND_URL}/api/netease/song/search?keywords=${encodeURIComponent(keyword)}&offset=${offset}&limit=${PAGE_SIZE}`
             );
             const data: SongSearchResponse = await res.json();
 

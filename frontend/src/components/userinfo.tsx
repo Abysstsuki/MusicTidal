@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import AuthModal from './authmodal';
 import BindPlaylistModal from './bindlist';
 
+import { BACKEND_URL } from '@/lib/api';
+
 interface User {
     isLoggedIn: boolean;
     name: string;
@@ -24,7 +26,7 @@ export default function UserInfo() {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        fetch('/api/user/me', {
+        fetch(`${BACKEND_URL}/api/user/me`, {
             method: 'GET',
             headers: {
                 Authorization: `Bearer ${token}`,

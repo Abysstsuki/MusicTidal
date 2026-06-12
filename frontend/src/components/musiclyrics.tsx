@@ -5,6 +5,7 @@ import SimpleBar from 'simplebar-react';
 import type SimpleBarCore from 'simplebar-core';
 import 'simplebar-react/dist/simplebar.min.css';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { BACKEND_URL } from '@/lib/api';
 
 interface LyricLine {
     time: number;
@@ -80,7 +81,7 @@ export default function MusicLyrics() {
 
             setLoading(true);
             try {
-                const response = await fetch(`/api/song/lyric?id=${currentSong.id}`);
+                const response = await fetch(`${BACKEND_URL}/api/netease/lyric?id=${currentSong.id}`);
                 const data = await response.json();
 
                 if (data.success && data.data.lyric) {

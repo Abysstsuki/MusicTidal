@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Song } from '@/types/music';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { BACKEND_URL } from '@/lib/api';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 interface PlaySongMessage {
     type: 'PLAY_SONG';
@@ -44,7 +45,7 @@ export default function MusicPlayer() {
     // 同步音频按钮功能
     const handleSyncAudio = async () => {
         try {
-            const res = await fetch('/api/song/currentPlaying');
+            const res = await fetch(`${BACKEND_URL}/api/queue/currentPlaying`);
             const data = await res.json();
             if (data.success && data.currentSong && data.currentSong.url) {
                 const { song, startTime, url } = data.currentSong;
@@ -63,7 +64,7 @@ export default function MusicPlayer() {
     // 切歌按钮功能
     const handleSkipNext = async () => {
         try {
-            const res = await fetch('/api/song/skipNext', {
+            const res = await fetch(`${BACKEND_URL}/api/queue/skipNext`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });
@@ -170,7 +171,7 @@ export default function MusicPlayer() {
         const handleEnded = async () => {
             // 歌曲播放完毕后尝试切换到下一首，如果队列为空则清空状态
             try {
-                const res = await fetch('/api/song/skipNext', {
+                const res = await fetch(`${BACKEND_URL}/api/queue/skipNext`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                 });

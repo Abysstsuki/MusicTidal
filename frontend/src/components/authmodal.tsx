@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+import { BACKEND_URL } from '@/lib/api';
+
 interface AuthModalProps {
     onClose: () => void;
     onLoginSuccess?: (username: string, token: string) => void;
@@ -45,7 +47,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                 ? { username, email, password }
                 : { email, password };
 
-            const res = await fetch(`/api/auth/${isRegister ? 'register' : 'login'}`, {
+            const res = await fetch(`${BACKEND_URL}/api/auth/${isRegister ? 'register' : 'login'}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
