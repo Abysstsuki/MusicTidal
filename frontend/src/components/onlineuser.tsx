@@ -11,8 +11,11 @@ export default function OnlineUser() {
     const wsRef = useRef<WebSocket | null>(null);
     const [username, setUsername] = useState<string | null>(null);
 
-    // 从 localStorage 初始化用户名
+    // 从 localStorage 初始化用户名（需同时验证 token 存在）
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return; // 无 token 视为未登录，忽略任何残留 user 数据
+
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
             try {

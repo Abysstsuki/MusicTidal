@@ -46,6 +46,7 @@ export default function UserInfo() {
             .catch(err => {
                 console.error('自动登录失败:', err);
                 localStorage.removeItem('token');
+                localStorage.removeItem('user');
             });
 
     }, []);
