@@ -163,7 +163,7 @@ export default function MusicReq({ isVisible }: MusicReqProps) {
                 </div>
             </div>
         )}
-        <div className="p-6 w-full max-w-full mx-auto relative z-10 flex flex-col"
+        <div className="p-6 w-full max-w-full mx-auto relative z-10 flex flex-col h-full min-h-0"
              style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Search bar */}
