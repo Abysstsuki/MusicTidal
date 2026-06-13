@@ -34,8 +34,12 @@ export default function ChatBox() {
 
     useEffect(() => {
         if (!username) return;
+        if (!WS_URL) {
+            console.warn('NEXT_PUBLIC_WS_URL 未配置，跳过 WebSocket 连接');
+            return;
+        }
 
-        const ws = new WebSocket(`${WS_URL}`);
+        const ws = new WebSocket(WS_URL);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -64,8 +68,12 @@ export default function ChatBox() {
             }
         };
 
+        ws.onerror = (err) => {
+            console.error('ChatBox WebSocket 错误', err);
+        };
+
         ws.onclose = () => {
-            console.log('WebSocket连接关闭');
+            console.log('ChatBox WebSocket 连接关闭');
         };
 
         return () => {
@@ -96,7 +104,7 @@ export default function ChatBox() {
 
     return (
         <div className="flex h-full w-full max-h-[100vh] p-3 relative overflow-hidden">
-            <div className="p-4 h-full max-h-full w-110 max-w-full mx-auto relative z-10 flex flex-col"
+            <div className="p-4 h-full max-h-full w-full mx-auto relative z-10 flex flex-col"
                  style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 <div className="flex-1 min-h-0">

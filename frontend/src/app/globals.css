@@ -115,3 +115,87 @@ body {
   border-bottom-color: var(--accent-blue);
   text-shadow: 0 0 18px rgba(99, 179, 255, 0.34);
 }
+
+/* ====== Responsive layout utilities ====== */
+
+/* Desktop: 3-column grid areas */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "left-panel player    right-panel"
+    "left-panel lyrics    right-panel";
+  gap: 0.75rem;
+  height: 100vh;
+  padding: 0.5rem;
+}
+
+/* Tablet: keep 3 columns but tighten proportions */
+@media (max-width: 1279px) {
+  .home-grid {
+    grid-template-columns: 0.85fr 2fr 0.85fr;
+    gap: 0.5rem;
+    padding: 0.375rem;
+  }
+}
+
+/* Mobile: single column stack + tabbar */
+@media (max-width: 767px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "player"
+      "content"
+      "tabbar";
+    gap: 0;
+    padding: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+/* Named grid area slots */
+.grid-area-left    { grid-area: left-panel; min-height: 0; overflow: hidden; }
+.grid-area-player  { grid-area: player; min-height: 0; }
+.grid-area-lyrics  { grid-area: lyrics; min-height: 0; overflow: hidden; }
+.grid-area-right   { grid-area: right-panel; min-height: 0; overflow: hidden; }
+
+/* Panel visibility: hidden on mobile unless active */
+@media (max-width: 767px) {
+  .grid-area-left,
+  .grid-area-right {
+    display: none;
+  }
+
+  .mobile-panel-visible {
+    display: flex !important;
+    flex-direction: column;
+    grid-area: content;
+    overflow: hidden;
+  }
+
+  .grid-area-player {
+    flex-shrink: 0;
+  }
+
+  .mobile-lyrics-visible {
+    display: flex !important;
+    flex-direction: column;
+    grid-area: content;
+    overflow: hidden;
+  }
+}
+
+/* Mobile tab bar container */
+.mobile-tabbar {
+  grid-area: tabbar;
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-tabbar {
+    display: flex;
+  }
+}

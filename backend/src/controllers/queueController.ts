@@ -1,29 +1,18 @@
 import { Request, Response } from 'express';
 import { songQueueService } from '../services/songQueueService';
-import { broadcastToAll } from '../services/websocketServer';
 import { getSongPlayInfo } from '../services/netease/song.service';
 
 export const addSongToQueue = (req: Request, res: Response) => {
     const song = req.body.song;
 
     if (!song || !song.id || !song.name) {
-        res.status(600).json({ error: '歌曲错误' });
+        res.status(400).json({ error: '歌曲错误' });
         return;
     }
 
     const added = songQueueService.enqueue(song);
 
-    broadcastToAll(
-        JSON.stringify({ type: 'queue:update', queue: songQueueService.getQueue() })
-    );
-
-    // 如果是队首歌曲，广播播放
-    if (songQueueService.getQueue().length === 1) {
-        broadcastToAll(
-            JSON.stringify({ type: 'song:play', song })
-        );
-    }
-    res.status(200).json({ message: '加入队列成功', song });
+    res.status(200).json({ message: '加入队列成功', song: added });
     return;
 };
 

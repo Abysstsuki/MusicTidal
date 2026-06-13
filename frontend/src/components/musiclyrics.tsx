@@ -153,7 +153,7 @@ export default function MusicLyrics() {
 
     return (
         <div className="flex h-full w-full p-3 relative overflow-hidden">
-            <div className="p-6 w-160 max-w-full mx-auto relative z-10"
+            <div className="p-6 w-full max-w-[640px] mx-auto relative z-10 h-full flex flex-col min-h-0"
                  style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 {/* Header */}
@@ -165,6 +165,7 @@ export default function MusicLyrics() {
                     <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(184,196,220,0.55)' }}>LRC_01</span>
                 </div>
 
+                <div className="flex-1 min-h-0">
                 <SimpleBar ref={simpleBarRef} style={{ maxHeight: '100%', height: '100%' }} autoHide={true} scrollbarMaxSize={50}>
                     <div className="flex flex-col items-center space-y-6" ref={containerRef}>
                         {loading ? (
@@ -195,6 +196,7 @@ export default function MusicLyrics() {
                         )}
                     </div>
                 </SimpleBar>
+                </div>
             </div>
         </div>
     );

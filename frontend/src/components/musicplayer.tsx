@@ -109,7 +109,16 @@ export default function MusicPlayer() {
     }
 
     useEffect(() => {
-        const ws = new WebSocket(`${WS_URL}`);
+        if (!WS_URL) {
+            console.warn('NEXT_PUBLIC_WS_URL 未配置，跳过 WebSocket 连接');
+            return;
+        }
+
+        const ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            console.log('MusicPlayer WebSocket 已连接');
+        };
 
         ws.onmessage = (event) => {
             const data: PlaySongMessage = JSON.parse(event.data);
@@ -123,6 +132,14 @@ export default function MusicPlayer() {
                 setStartTime(startTime);
                 // 移除重复的播放逻辑，由自动播放useEffect处理
             }
+        };
+
+        ws.onerror = (err) => {
+            console.error('MusicPlayer WebSocket 错误', err);
+        };
+
+        ws.onclose = () => {
+            console.log('MusicPlayer WebSocket 连接关闭');
         };
 
         // 刷新时触发同步
@@ -228,7 +245,7 @@ export default function MusicPlayer() {
 
     return (
     <div className="w-full p-3 relative overflow-hidden">
-        <div className="p-6 h-full w-110 max-w-full mx-auto relative z-10"
+        <div className="p-6 h-full w-full max-w-[440px] mx-auto relative z-10"
              style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Header annotation */}

@@ -53,39 +53,70 @@ export default function MusicQueue() {
   useEffect(() => {
     fetchQueue();
 
-    const ws = new WebSocket(`${WS_URL}`);
-    wsRef.current = ws;
+    if (!WS_URL) {
+      console.warn('NEXT_PUBLIC_WS_URL 未配置，跳过 WebSocket 连接');
+      return;
+    }
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'QUEUE_UPDATED') {
-          setQueue(data.payload); // ✅ payload 已包含 instanceId
-        } else if (data.type === 'PLAY_SONG') {
-          // 当歌曲开始播放时，重新获取队列状态以同步显示
-          fetchQueue();
+    let retries = 0;
+    const MAX_RETRIES = 3;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let ws: WebSocket | null = null;
+
+    const connect = () => {
+      if (cancelled) return;
+      ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('MusicQueue WebSocket 已连接');
+        retries = 0; // 成功后重置重试计数
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'QUEUE_UPDATED') {
+            setQueue(data.payload);
+          } else if (data.type === 'PLAY_SONG') {
+            fetchQueue();
+          }
+        } catch (e) {
+          console.error('解析 WebSocket 消息失败', e);
         }
-      } catch (e) {
-        console.error('解析 WebSocket 消息失败', e);
-      }
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket 错误', err);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket 连接关闭');
+        if (cancelled) return;
+        if (retries < MAX_RETRIES) {
+          const delay = Math.pow(2, retries) * 1000;
+          retries++;
+          console.log(`WebSocket 将在 ${delay}ms 后重连 (${retries}/${MAX_RETRIES})`);
+          reconnectTimer = setTimeout(connect, delay);
+        } else {
+          console.warn('WebSocket 重连次数已达上限，停止重连');
+        }
+      };
     };
 
-    ws.onerror = (err) => {
-      console.error('WebSocket 错误', err);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket 连接关闭');
-    };
+    connect();
 
     return () => {
-      ws.close();
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
     };
   }, []);
 
   return (
     <div className="w-full h-full p-3 relative overflow-hidden">
-        <div className="p-4 h-full w-110 max-w-full mx-auto relative z-10 overflow-y-auto"
+        <div className="p-4 h-full w-full mx-auto relative z-10 overflow-y-auto"
              style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
             {/* Header */}

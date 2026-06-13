@@ -75,7 +75,7 @@ export default function UserInfo() {
 
     return (
         <div className="w-full h-full flex p-3 relative overflow-hidden">
-            <div className="p-6 w-160 max-w-full mx-auto relative z-10 flex flex-col items-center space-y-6"
+            <div className="p-6 w-full mx-auto relative z-10 flex flex-col items-center space-y-6"
                  style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
 
                 {/* DataCircle avatar */}

@@ -12,6 +12,12 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
+// API 响应禁用缓存，阻止浏览器返回 304
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // 路由
 app.use('/api', routes);
 

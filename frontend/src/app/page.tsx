@@ -8,14 +8,17 @@ import MusicQueue from '@/components/musicqueue';
 import UserInfo from '@/components/userinfo';
 import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
+import MobileTabBar from '@/components/MobileTabBar';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { MusicProvider, useMusicContext } from '@/contexts/MusicContext';
+
+type MobileTab = 'info' | 'request' | 'lyrics' | 'chat' | 'queue';
 
 function BackgroundLayer() {
     const { currentSong } = useMusicContext();
 
     return (
         <>
-            {/* 封面高模糊背景 */}
             {currentSong?.prcUrl && (
                 <div
                     style={{
@@ -31,7 +34,6 @@ function BackgroundLayer() {
                     }}
                 />
             )}
-            {/* 坐标网格 */}
             <div
                 className="grid-overlay"
                 style={{
@@ -47,6 +49,9 @@ function BackgroundLayer() {
 export default function Home() {
   const [activePanel, setActivePanel] = useState<'chat' | 'queue'>('chat');
   const [leftPanel, setLeftPanel] = useState<'info' | 'request'>('info');
+  const [mobileTab, setMobileTab] = useState<MobileTab>('info');
+  const isMobile = useIsMobile();
+
   const tabClass = (isActive: boolean) =>
     `text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all home-tab ${
       isActive ? 'home-tab-active' : ''
@@ -54,109 +59,146 @@ export default function Home() {
 
   return (
     <MusicProvider>
-        <BackgroundLayer />
-      <Fragment>
-        <div className="h-[100vh] grid grid-cols-7 grid-rows-8 gap-3">
-        {/* 中间播放器区域 */}
-        <div className="col-span-3 row-span-3 col-start-3 row-start-1">
+      <BackgroundLayer />
+      <div className="home-grid">
+        {/* ============ Desktop/Tablet Layout ============ */}
+        {!isMobile && (
+          <>
+            {/* Left Panel */}
+            <div className="grid-area-left flex flex-col p-3 relative min-w-0">
+              <div className="flex justify-center space-x-4 mb-2 flex-shrink-0">
+                <button
+                  onClick={() => setLeftPanel('info')}
+                  className={tabClass(leftPanel === 'info')}
+                >
+                  在线信息
+                </button>
+                <button
+                  onClick={() => setLeftPanel('request')}
+                  className={tabClass(leftPanel === 'request')}
+                >
+                  点歌
+                </button>
+              </div>
+              <div className="flex-1 w-full relative min-h-0">
+                <div
+                  className={`absolute inset-0 transition-opacity duration-300 ${
+                    leftPanel === 'info' ? 'block' : 'hidden'
+                  }`}
+                >
+                  <div className="h-1/2 w-full">
+                    <UserInfo />
+                  </div>
+                  <div className="h-1/2 w-full">
+                    <OnlineUser />
+                  </div>
+                </div>
+                <div
+                  className={`absolute inset-0 transition-opacity duration-300 ${
+                    leftPanel === 'request' ? 'block' : 'hidden'
+                  }`}
+                >
+                  <MusicReq isVisible={leftPanel === 'request'} />
+                </div>
+              </div>
+            </div>
+
+            {/* Lyrics */}
+            <div className="grid-area-lyrics">
+              <div className="w-full h-full">
+                <MusicLyrics />
+              </div>
+            </div>
+
+            {/* Right Panel */}
+            <div className="grid-area-right flex flex-col p-3 relative min-w-0">
+              <div className="flex justify-center space-x-4 mb-2 flex-shrink-0">
+                <button
+                  onClick={() => setActivePanel('chat')}
+                  className={tabClass(activePanel === 'chat')}
+                >
+                  聊天
+                </button>
+                <button
+                  onClick={() => setActivePanel('queue')}
+                  className={tabClass(activePanel === 'queue')}
+                >
+                  歌曲队列
+                </button>
+              </div>
+              <div className="flex-1 w-full relative min-h-0">
+                <div
+                  className={`absolute inset-0 transition-opacity duration-300 ${
+                    activePanel === 'chat' ? 'block' : 'hidden'
+                  }`}
+                >
+                  <ChatBox />
+                </div>
+                <div
+                  className={`absolute inset-0 transition-opacity duration-300 ${
+                    activePanel === 'queue' ? 'block' : 'hidden'
+                  }`}
+                >
+                  <MusicQueue />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ============ Player (all breakpoints) ============ */}
+        <div className="grid-area-player">
           <div className="w-full h-full flex items-center justify-center">
             <MusicPlayer />
           </div>
         </div>
 
-        {/* 中间歌词区域 */}
-        <div className="col-span-3 row-span-5 col-start-3 row-start-4">
-          <div className="w-full h-full">
-            <MusicLyrics />
-          </div>
-        </div>
-
-        {/* 左侧：切换 + 显示区 */}
-        <div className="col-span-2 row-span-8 col-start-1 row-start-1 flex flex-col p-3 relative">
-          {/* 左侧切换标签 */}
-          <div className="flex justify-center space-x-4 mb-2">
-            <button
-              onClick={() => setLeftPanel('info')}
-              className={tabClass(leftPanel === 'info')}
-            >
-              在线信息
-            </button>
-            <button
-              onClick={() => setLeftPanel('request')}
-              className={tabClass(leftPanel === 'request')}
-            >
-              点歌
-            </button>
-          </div>
-
-          {/* 左侧内容区域 */}
-          <div className="flex-1 w-full h-full relative">
-            {/* 在线信息区 */}
-            <div
-              className={`absolute inset-0 transition-opacity duration-300 ${
-                leftPanel === 'info' ? 'block' : 'hidden'
-              }`}
-            >
-              <div className="h-1/2 w-full">
-                <UserInfo />
+        {/* ============ Mobile Layout ============ */}
+        {isMobile && (
+          <>
+            {/* Mobile content panel */}
+            {mobileTab === 'info' && (
+              <div className="mobile-panel-visible">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                  <div className="flex-1 min-h-0">
+                    <UserInfo />
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <OnlineUser />
+                  </div>
+                </div>
               </div>
-              <div className="h-1/2 w-full">
-                <OnlineUser />
+            )}
+
+            {mobileTab === 'request' && (
+              <div className="mobile-panel-visible">
+                <MusicReq isVisible={true} />
               </div>
-            </div>
+            )}
 
-            {/* 点歌区 */}
-            <div
-              className={`absolute inset-0 transition-opacity duration-300 ${
-                leftPanel === 'request' ? 'block' : 'hidden'
-              }`}
-            >
-              <MusicReq isVisible={leftPanel === 'request'} />
-            </div>
-          </div>
-        </div>
+            {mobileTab === 'lyrics' && (
+              <div className="mobile-panel-visible">
+                <MusicLyrics />
+              </div>
+            )}
 
-        {/* 右侧：聊天 / 队列 */}
-        <div className="col-span-2 row-span-8 col-start-6 row-start-1 flex flex-col p-3 relative">
-          {/* 标签切换栏 */}
-          <div className="flex justify-center space-x-4 mb-2">
-            <button
-              onClick={() => setActivePanel('chat')}
-              className={tabClass(activePanel === 'chat')}
-            >
-              聊天
-            </button>
-            <button
-              onClick={() => setActivePanel('queue')}
-              className={tabClass(activePanel === 'queue')}
-            >
-              歌曲队列
-            </button>
-          </div>
+            {mobileTab === 'chat' && (
+              <div className="mobile-panel-visible">
+                <ChatBox />
+              </div>
+            )}
 
-          {/* 内容区 */}
-          <div className="flex-1 w-full h-full relative">
-            {/* 聊天面板 */}
-            <div
-              className={`absolute inset-0 transition-opacity duration-300 ${
-                activePanel === 'chat' ? 'block' : 'hidden'
-              }`}
-            >
-              <ChatBox />
-            </div>
+            {mobileTab === 'queue' && (
+              <div className="mobile-panel-visible">
+                <MusicQueue />
+              </div>
+            )}
 
-            {/* 队列面板 */}
-            <div
-              className={`absolute inset-0 transition-opacity duration-300 ${
-                activePanel === 'queue' ? 'block' : 'hidden'
-              }`}
-            >
-              <MusicQueue />
-            </div>
-          </div>
-        </div>
-        </div>
-      </Fragment>
+            {/* Mobile TabBar */}
+            <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
+          </>
+        )}
+      </div>
     </MusicProvider>
   );
 }

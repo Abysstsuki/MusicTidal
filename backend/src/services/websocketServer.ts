@@ -31,6 +31,18 @@ export function setupWebSocketServer(server: Server) {
             }));
         }
 
+        // 推送当前队列（延迟导入避免循环依赖）
+        try {
+            const { songQueueService } = require('../services/songQueueService');
+            const queue = songQueueService.getQueue();
+            ws.send(JSON.stringify({
+                type: 'QUEUE_UPDATED',
+                payload: queue,
+            }));
+        } catch (e) {
+            // songQueueService 可能尚未初始化，忽略
+        }
+
         ws.on('message', (data) => {
             try {
                 const message = JSON.parse(data.toString());

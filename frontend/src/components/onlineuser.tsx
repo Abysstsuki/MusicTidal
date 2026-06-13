@@ -49,7 +49,12 @@ export default function OnlineUser() {
     // 当 username 有效时建立 WebSocket 连接
     useEffect(() => {
         if (!username) return;
-        const ws = new WebSocket(`${WS_URL}`);
+        if (!WS_URL) {
+            console.warn('NEXT_PUBLIC_WS_URL 未配置，跳过 WebSocket 连接');
+            return;
+        }
+
+        const ws = new WebSocket(WS_URL);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -64,8 +69,12 @@ export default function OnlineUser() {
             }
         };
 
+        ws.onerror = (err) => {
+            console.error('OnlineUser WebSocket 错误', err);
+        };
+
         ws.onclose = () => {
-            console.log('WebSocket closed');
+            console.log('OnlineUser WebSocket 关闭');
         };
 
         return () => {
