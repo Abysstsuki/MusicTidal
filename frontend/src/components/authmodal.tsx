@@ -1,180 +1,47 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
-import { BACKEND_URL } from '@/lib/api';
+import { useState, type FormEvent } from 'react';
+import CloseRounded from '@mui/icons-material/CloseRounded';
+import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
+import { apiRequest } from '@/lib/api';
+import StageDialog from './StageDialog';
 
 interface AuthModalProps {
-    onClose: () => void;
-    onLoginSuccess?: (username: string, token: string) => void;
+  onClose: () => void;
+  onLoginSuccess?: (username: string, token: string) => void;
 }
-
 export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
-    const [show, setShow] = useState(false);
-    const [isRegister, setIsRegister] = useState(false);
-    const [username, setUsername] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        const timer = setTimeout(() => setShow(true), 10);
-        return () => clearTimeout(timer);
-    }, []);
-
-    const handleSubmit = async () => {
-        if (isRegister) {
-            if (!username || !email || !password) {
-                setError('请填写所有注册信息');
-                return;
-            }
-        } else {
-            if (!email || !password) {
-                setError('请填写邮箱和密码');
-                return;
-            }
-        }
-
-        if (password.length < 6) {
-            setError('密码长度至少为 6 位');
-            return;
-        }
-
-        setError('');
-
-        try {
-            const payload = isRegister
-                ? { username, email, password }
-                : { email, password };
-
-            const res = await fetch(`${BACKEND_URL}/api/auth/${isRegister ? 'register' : 'login'}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                setError(data.error || '请求失败');
-                return;
-            }
-
-            // 登录时存 token 并通知父组件
-            // 只改登录相关部分，省略其他代码
-
-            if (!isRegister) {
-                if (data.token) {
-                    localStorage.setItem('token', data.token);
-                } else {
-                    console.warn('登录成功，但未返回 token');
-                }
-
-                // 注意：从后端返回的 user 对象里取用户名
-                if (onLoginSuccess) {
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    onLoginSuccess(data.user.username, data.token);
-                }
-            }
-
-
-            alert(`${isRegister ? '注册' : '登录'}成功：${data.username || username || email}`);
-            location.reload();
-            onClose();
-        } catch {
-            setError('网络错误，请稍后重试');
-        }
-    };
-
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
-            onClick={onClose}
-        >
-            <div
-                className={`transition-all duration-300 ${show ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-                style={{
-                    border: '1px solid var(--line)',
-                    background: 'var(--bg-panel-strong)',
-                    padding: 24,
-                    width: '26rem',
-                    maxWidth: '90vw'
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex justify-between items-center mb-6"
-                     style={{ borderBottom: '1px solid var(--line-light)', paddingBottom: 12 }}>
-                    <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--accent-blue)' }}>
-                        AUTHENTICATION // <span style={{ color: 'var(--text-secondary)' }}>{isRegister ? 'REGISTER' : 'LOGIN'}</span>
-                    </span>
-                    <button onClick={onClose} style={{ color: 'rgba(184,196,220,0.55)', cursor: 'pointer', background: 'none', border: 'none', fontSize: 14 }}>✕</button>
-                </div>
-
-                {/* Form fields */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {isRegister && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>NICKNAME</span>
-                            <input
-                                style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                                placeholder="输入昵称"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                            />
-                        </div>
-                    )}
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>EMAIL</span>
-                        <input
-                            style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                            placeholder="输入邮箱"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--text-muted)' }}>PASSWORD</span>
-                        <input
-                            style={{ border: '1px solid var(--line)', background: 'transparent', padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                            placeholder="••••••••"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                    </div>
-
-                    {error && (
-                        <div style={{ color: 'rgba(255,80,80,0.7)', fontSize: 11, textAlign: 'center' }}>{error}</div>
-                    )}
-
-                    <button onClick={handleSubmit}
-                            style={{
-                                padding: '8px 0',
-                                border: '1px solid var(--accent-blue-line)',
-                                fontSize: '9px',
-                                letterSpacing: '0.3em',
-                                color: 'var(--accent-blue)',
-                                background: 'transparent',
-                                cursor: 'pointer',
-                                textAlign: 'center',
-                                width: '100%'
-                            }}>
-                        {isRegister ? 'REGISTER' : 'LOGIN'}
-                    </button>
-
-                    <div
-                        style={{ fontSize: '9px', letterSpacing: '0.1em', color: 'var(--text-muted)', textAlign: 'center', cursor: 'pointer' }}
-                        onClick={() => { setIsRegister(!isRegister); setError(''); }}
-                    >
-                        {isRegister ? 'ALREADY HAVE AN ACCOUNT? LOGIN' : "NO ACCOUNT? REGISTER"}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
+  const [isRegister, setIsRegister] = useState(false);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(''); setNotice(''); setBusy(true);
+    try {
+      const payload = isRegister ? { username: username.trim(), email: email.trim(), password } : { email: email.trim(), password };
+      const data = await apiRequest<{ token?: string; user?: { username: string } }>('/api/auth/' + (isRegister ? 'register' : 'login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (isRegister) { setIsRegister(false); setNotice('注册成功，登录后就能和大家聊天'); setPassword(''); }
+      else {
+        if (!data.token || !data.user?.username) throw new Error('登录未完成，请重试');
+        onLoginSuccess?.(data.user.username, data.token); onClose();
+      }
+    } catch (err) { setError((err as Error).message); }
+    finally { setBusy(false); }
+  };
+  return <StageDialog label={isRegister ? '注册账户' : '登录账户'} onClose={onClose}>
+    <div className="auth-header"><span className="wordmark">Music<span>Tidal</span></span><button className="icon-button" onClick={onClose} aria-label="关闭登录"><CloseRounded /></button></div>
+    <div className="auth-intro"><p className="eyebrow">ON THE SAME FREQUENCY</p><h2>{isRegister ? '找到你的同频。' : '欢迎回来，一起听。'}</h2><p>一首歌，一段对话，一个共同的此刻。</p></div>
+    <form className="auth-form" onSubmit={event => void submit(event)}>
+      {isRegister && <label>昵称<input required maxLength={40} autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} placeholder="大家怎么称呼你？" /></label>}
+      <label>邮箱<input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="你的邮箱" /></label>
+      <label>密码<input required type="password" minLength={6} autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" /></label>
+      {error && <p className="inline-error" role="alert">{error}</p>}{notice && <p className="inline-success" role="status">{notice}</p>}
+      <button className="primary-button" type="submit" disabled={busy}>{busy ? '请稍等…' : isRegister ? '注册' : '登录'}<ArrowForwardRounded fontSize="small" /></button>
+      <button className="auth-switch" type="button" disabled={busy} onClick={() => { setIsRegister(value => !value); setError(''); setNotice(''); }}>{isRegister ? '已有账户？登录' : '第一次来？创建账户'}</button>
+    </form>
+  </StageDialog>;
 }

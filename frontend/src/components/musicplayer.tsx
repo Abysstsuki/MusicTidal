@@ -1,361 +1,149 @@
 'use client';
 
-import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { Song } from '@/types/music';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import PauseRounded from '@mui/icons-material/PauseRounded';
+import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
+import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
+import SyncRounded from '@mui/icons-material/SyncRounded';
+import DownloadRounded from '@mui/icons-material/DownloadRounded';
+import LyricsOutlined from '@mui/icons-material/LyricsOutlined';
+import FullscreenRounded from '@mui/icons-material/FullscreenRounded';
+import FullscreenExitRounded from '@mui/icons-material/FullscreenExitRounded';
+import VolumeUpRounded from '@mui/icons-material/VolumeUpRounded';
+import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
-import { BACKEND_URL } from '@/lib/api';
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
-interface PlaySongMessage {
-    type: 'PLAY_SONG';
-    payload: {
-        song: Song;
-        url: string;
-        startTime: number; // 毫秒时间戳
-    };
+import SongCover from '@/components/modelItem/SongCover';
+
+export function formatDuration(ms: number) {
+  const seconds = Math.floor(Math.max(0, Number.isFinite(ms) ? ms : 0) / 1000);
+  return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 }
 
-export default function MusicPlayer() {
-    const { currentSong, currentPosition, setCurrentSong, setCurrentPosition, setIsPlaying } = useMusicContext();
-    const [url, setUrl] = useState<string>('');
-    const [startTime, setStartTime] = useState<number>(0);
-    const [showPlayPrompt, setShowPlayPrompt] = useState(false);
-    const [volume, setVolume] = useState(30);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    // 尝试播放当前音频（供自动播放和用户手势恢复使用）
-    const tryPlay = React.useCallback(async () => {
-        const audio = audioRef.current;
-        if (!audio || !url) return false;
-        try {
-            await audio.play();
-            setIsPlaying(true);
-            setShowPlayPrompt(false);
-            return true;
-        } catch (err) {
-            if ((err as Error).name === 'NotAllowedError') {
-                setShowPlayPrompt(true);
-            } else {
-                console.warn('音频播放失败:', err);
-            }
-            setIsPlaying(false);
-            return false;
-        }
-    }, [url]);
+export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
+  const { currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, isPreview, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [volume, setVolume] = useState(30);
+  const lastVolume = useRef(30);
+  const [showPlayPrompt, setShowPlayPrompt] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
-    // 同步音频按钮功能
-    const handleSyncAudio = async () => {
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/queue/currentPlaying`);
-            const data = await res.json();
-            if (data.success && data.currentSong && data.currentSong.url) {
-                const { song, startTime, url } = data.currentSong;
-                setShowPlayPrompt(false);
-                // 确保创建新的歌曲对象引用，触发组件重新渲染
-                setCurrentSong(song ? { ...song } : null);
-                setStartTime(startTime);
-                setUrl(url);
-                // 移除播放逻辑，由自动播放useEffect处理
-            }
-        } catch (err) {
-            console.error('同步音频失败', err);
-        }
-    };
-
-    // 切歌按钮功能
-    const handleSkipNext = async () => {
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/queue/skipNext`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            const data = await res.json();
-            if (data.success) {
-                console.log('已跳到下一首');
-            }
-        } catch (err) {
-            console.error('切歌失败', err);
-        }
-    };
-
-    // 下载歌曲按钮功能
-    const handleDownloadSong = async () => {
-        if (!currentSong || !url) {
-            console.warn('没有可下载的歌曲');
-            return;
-        }
-        
-        try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `${currentSong.name} - ${currentSong.artist}.mp3`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
-        } catch (err) {
-            console.error('下载失败', err);
-        }
-    };
-
-    function formatDuration(value: number) {
-        if (value <= 0 || isNaN(value)) return '0:00';
-        const totalSeconds = Math.floor(value / 1000);
-        const minute = Math.floor(totalSeconds / 60);
-        const secondLeft = totalSeconds % 60;
-        return `${minute}:${secondLeft < 10 ? `0${secondLeft}` : secondLeft}`;
+  const tryPlay = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    try {
+      await audio.play(); setShowPlayPrompt(false);
+    } catch (error) {
+      if ((error as Error).name === 'NotAllowedError') setShowPlayPrompt(true);
+      else setNotice('音频暂时无法播放，请尝试重新同步');
+      setIsPlaying(false);
     }
+  }, [audioUrl, setIsPlaying]);
 
-    useEffect(() => {
-        if (!WS_URL) {
-            console.warn('NEXT_PUBLIC_WS_URL 未配置，跳过 WebSocket 连接');
-            return;
-        }
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || isPreview) return;
+    setNotice('');
+    setShowPlayPrompt(false);
+    if (!audioUrl || !currentSong) { audio.pause(); audio.removeAttribute('src'); audio.load(); return; }
+    audio.src = audioUrl;
+    const align = () => {
+      audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, currentSong.duration / 1000));
+      setCurrentPosition(audio.currentTime * 1000);
+      void tryPlay();
+    };
+    audio.addEventListener('loadedmetadata', align, { once: true });
+    audio.load();
+    return () => audio.removeEventListener('loadedmetadata', align);
+  }, [audioUrl, startTime, playbackRevision, currentSong, isPreview, setCurrentPosition, tryPlay]);
 
-        const ws = new WebSocket(WS_URL);
+  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [volume]);
+  useEffect(() => {
+    const onFullscreen = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    return () => document.removeEventListener('fullscreenchange', onFullscreen);
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 4500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
+    if (!isPreview || !isPlaying || !currentSong) return;
+    const basePosition = currentPosition;
+    const baseTime = Date.now();
+    const timer = setInterval(() => {
+      const next = Math.min(basePosition + Date.now() - baseTime, currentSong.duration);
+      setCurrentPosition(next);
+      if (next >= currentSong.duration) setIsPlaying(false);
+    }, 250);
+    return () => clearInterval(timer);
+    // The base position is captured when preview playback starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreview, isPlaying, currentSong, setCurrentPosition, setIsPlaying]);
 
-        ws.onopen = () => {
-            console.log('MusicPlayer WebSocket 已连接');
-        };
-
-        ws.onmessage = (event) => {
-            const data: PlaySongMessage = JSON.parse(event.data);
-            if (data.type === 'PLAY_SONG') {
-                const { song, url, startTime } = data.payload;
-                console.log('音乐播放器: 收到WebSocket消息，新歌曲:', song?.name, 'ID:', song?.id);
-                setShowPlayPrompt(false);
-                // 确保创建新的歌曲对象引用，触发组件重新渲染
-                setCurrentSong(song ? { ...song } : null);
-                setUrl(url);
-                setStartTime(startTime);
-                // 移除重复的播放逻辑，由自动播放useEffect处理
-            }
-        };
-
-        ws.onerror = (err) => {
-            console.error('MusicPlayer WebSocket 错误', err);
-        };
-
-        ws.onclose = () => {
-            console.log('MusicPlayer WebSocket 连接关闭');
-        };
-
-        // 刷新时触发同步
-        handleSyncAudio();
-
-        return () => {
-            ws.close();
-        };
-    }, []);
-
-    // 自动播放逻辑 - 监控状态变化并主动播放
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio || !url || !currentSong) return;
-
-        // 设置音频源
-        audio.src = url;
-
-        // 计算播放位置
-        const delay = (Date.now() - startTime) / 1000;
-        audio.currentTime = Math.min(delay, currentSong.duration / 1000);
-
-        // 主动检查并播放音频
-        if (audio.paused) {
-            tryPlay();
-        }
-    }, [currentSong, url, startTime, tryPlay]); // 监控这些状态变化
-
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const updatePosition = () => {
-            // 将秒转换为毫秒，与currentSong.duration单位保持一致
-            setCurrentPosition(audio.currentTime * 1000);
-        };
-
-        const handlePlay = () => {
-            setIsPlaying(true);
-        };
-
-        const handlePause = () => {
-            setIsPlaying(false);
-        };
-
-        const handleEnded = async () => {
-            // 歌曲播放完毕后尝试切换到下一首，如果队列为空则清空状态
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/queue/skipNext`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                });
-                const data = await res.json();
-                if (!data.success) {
-                    // 如果切歌失败（可能是队列为空），则清空状态
-                    setCurrentSong(null);
-                    setUrl('');
-                    setStartTime(0);
-                    setCurrentPosition(0);
-                    setIsPlaying(false);
-                }
-                // 如果切歌成功，WebSocket会推送新歌曲
-            } catch (err) {
-                console.error('自动切歌失败', err);
-                // 出错时清空状态
-                setCurrentSong(null);
-                setUrl('');
-                setStartTime(0);
-                setCurrentPosition(0);
-                setIsPlaying(false);
-            }
-        };
-
-        audio.addEventListener('timeupdate', updatePosition);
-        audio.addEventListener('ended', handleEnded);
-        audio.addEventListener('play', handlePlay);
-        audio.addEventListener('pause', handlePause);
-
-        return () => {
-            audio.removeEventListener('timeupdate', updatePosition);
-            audio.removeEventListener('ended', handleEnded);
-            audio.removeEventListener('play', handlePlay);
-            audio.removeEventListener('pause', handlePause);
-        };
-    }, []); // 移除song依赖，确保监听器只添加一次
-
-    // 用户手势恢复播放：当浏览器阻止自动播放时，捕获首次点击来恢复
-    useEffect(() => {
-        if (!showPlayPrompt) return;
-
-        const handler = () => {
-            tryPlay();
-        };
-
-        // 使用 once:true 确保捕获一次交互后就移除
-        document.addEventListener('click', handler, { once: true });
-        document.addEventListener('touchstart', handler, { once: true });
-        return () => {
-            document.removeEventListener('click', handler);
-            document.removeEventListener('touchstart', handler);
-        };
-    }, [showPlayPrompt, tryPlay]);
-
-    return (
-    <div className="w-full p-3 relative overflow-hidden">
-        <div className="p-6 h-full w-full max-w-[440px] mx-auto relative z-10"
-             style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
-
-            {/* Header annotation */}
-            <div className="flex justify-between items-center mb-4">
-                <span style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'var(--text-secondary)' }}>NOW PLAYING // <span style={{ color: 'var(--accent-blue)' }}>LIVE</span></span>
-                <span style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(184,196,220,0.55)' }}>
-                    ID: 0x{currentSong?.id?.toString(16).padStart(4,'0') || '----'}
-                </span>
-            </div>
-
-            {/* Cover + Info */}
-            <div className="flex gap-5">
-                <div className="relative flex-shrink-0">
-                    <img alt="music cover" src={currentSong?.prcUrl || '/static/background.jpg'}
-                         className="w-24 h-24 object-cover"
-                         style={{ border: '1px solid var(--line)' }} />
-                    {/* DataCircle marker */}
-                    <div style={{
-                        position: 'absolute', top: -4, right: -4,
-                        width: 8, height: 8,
-                        border: '1px solid var(--accent-blue-line)',
-                        borderRadius: '50%',
-                        background: 'var(--bg-primary)'
-                    }} />
-                </div>
-                <div className="flex flex-col justify-center">
-                    <div style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'var(--text-muted)', marginBottom: 2 }}>TRACK</div>
-                    <div className="text-xl font-semibold text-[var(--text-primary)]" style={{ letterSpacing: '-0.01em' }}>
-                        {currentSong?.name || '暂无歌曲'}
-                    </div>
-                    <div className="text-sm text-[var(--text-secondary)] mt-0.5">
-                        {currentSong?.artist || ''}
-                    </div>
-                </div>
-            </div>
-
-            {/* Progress bar - annotation line style, NOT draggable */}
-            <div className="mt-5">
-                <div className="flex justify-between items-center mb-1">
-                    <span style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'var(--text-muted)' }}>PROGRESS</span>
-                    <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>
-                        {currentSong ? Math.round((currentPosition / currentSong.duration) * 100) + '%' : '0%'}
-                    </span>
-                </div>
-                <div style={{ height: '0.5px', background: 'var(--line)', position: 'relative' }}>
-                    <div style={{
-                        width: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
-                        height: '0.5px',
-                        background: 'var(--accent-blue)',
-                        transition: 'width 1s linear'
-                    }} />
-                    <div style={{
-                        position: 'absolute',
-                        left: currentSong ? Math.min((currentPosition / currentSong.duration) * 100, 100) + '%' : '0%',
-                        top: '-3px',
-                        width: 6, height: 6,
-                        border: '0.5px solid var(--accent-blue)',
-                        borderRadius: '50%',
-                        background: 'var(--bg-primary)',
-                        transform: 'translateX(-50%)'
-                    }} />
-                </div>
-                <div className="flex justify-between mt-1">
-                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{formatDuration(currentPosition)}</span>
-                    <span style={{ fontSize: '10px', color: 'rgba(184,196,220,0.55)' }}>
-                        {currentSong ? formatDuration(currentSong.duration) : '00:00'}
-                    </span>
-                </div>
-            </div>
-
-            {/* Controls - symbol buttons (no MUI) */}
-            <div className="flex items-center justify-center gap-6 mt-5">
-                <button onClick={handleSyncAudio} className="text-[var(--text-secondary)] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[var(--text-primary)] transition-colors">&#x27F3;</button>
-                <button onClick={handleSkipNext} className="text-[var(--text-primary)] text-xl cursor-pointer bg-transparent border-none p-1 hover:text-white transition-colors">&#x23ED;</button>
-                <button onClick={handleDownloadSong} className="text-[var(--text-secondary)] text-base cursor-pointer bg-transparent border-none p-1 hover:text-[var(--text-primary)] transition-colors">&#x2B73;</button>
-            </div>
-
-            {/* Volume - draggable */}
-            <div className="flex items-center gap-2 mt-4">
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.1em' }}>VOL</span>
-                <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={volume}
-                    onChange={(e) => { const v = parseInt(e.target.value); setVolume(v); if (audioRef.current) audioRef.current.volume = v / 100; }}
-                    style={{
-                        flex: 1, height: '0.5px',
-                        background: 'var(--line)',
-                        WebkitAppearance: 'none', appearance: 'none',
-                        outline: 'none', cursor: 'pointer'
-                    }}
-                />
-                <span style={{ fontSize: '9px', color: 'var(--text-secondary)', width: 28, textAlign: 'right' }}>{volume}%</span>
-            </div>
-
-            {/* Autoplay overlay - keep exactly as-is */}
-            {showPlayPrompt && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-sm z-20 cursor-pointer"
-                     onClick={(e) => { e.stopPropagation(); tryPlay(); }}>
-                    <div className="text-white text-center">
-                        <div className="text-5xl mb-2">&#x25B6;</div>
-                        <div className="text-base font-medium">点击播放</div>
-                        <div className="text-xs mt-1 text-white/60">单击任意位置即可开始播放</div>
-                    </div>
-                </div>
-            )}
-
-            <audio ref={audioRef} hidden />
+  const perform = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try { await action(); } catch (error) { setNotice((error as Error).message || '操作失败，请稍后再试'); }
+    finally { setBusy(false); }
+  };
+  const togglePlayback = () => {
+    if (isPreview) { setIsPlaying(!isPlaying); return; }
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    if (audio.paused) {
+      // Resuming catches up to everyone instead of playing an old local position.
+      if (currentSong) audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, currentSong.duration / 1000));
+      void tryPlay();
+    } else audio.pause();
+  };
+  const download = async () => {
+    if (!currentSong || !audioUrl) return;
+    const response = await fetch(audioUrl);
+    if (!response.ok) throw new Error('下载失败，请稍后再试');
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = objectUrl; link.download = currentSong.name + ' - ' + currentSong.artist + '.mp3';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  };
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+    else throw new Error('当前浏览器不支持全屏');
+  };
+  const progress = currentSong?.duration ? Math.max(0, Math.min(100, currentPosition / currentSong.duration * 100)) : 0;
+  return (
+    <section className="player-dock" aria-label="音乐播放器">
+      {notice && <p className="player-notice" role="status">{notice}</p>}
+      {showPlayPrompt && <button className="autoplay-prompt" onClick={togglePlayback}><PlayArrowRounded fontSize="small" />点击播放，加入此刻</button>}
+      <div className="player-timeline" role="progressbar" aria-label="歌曲播放进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+        <div style={{ width: progress + '%' }} />
+      </div>
+      <span className="player-time">{formatDuration(currentPosition)} / {formatDuration(currentSong?.duration || 0)}</span>
+      <div className="player-row">
+        <div className="player-track">
+          <SongCover src={currentSong?.prcUrl} />
+          <div><strong>{currentSong?.name || '还没有歌曲'}</strong><span>{currentSong?.artist || '等你点一首'}</span></div>
         </div>
-    </div>
-);
+        <button className="sync-button" disabled={busy || isPreview} onClick={() => void perform(syncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
+          <SyncRounded fontSize="small" /><span>{isPreview ? '预览' : connection === 'connected' ? '同步中' : '同步'}</span><i />
+        </button>
+        <div className="transport-controls">
+          <button className="icon-button download-button" disabled={!audioUrl || busy} onClick={() => void perform(download)} title="下载歌曲" aria-label="下载歌曲"><DownloadRounded /></button>
+          <button className="play-button" onClick={togglePlayback} disabled={!currentSong || (!isPreview && !audioUrl)} title={isPlaying ? '仅暂停我的播放' : '加入同步播放'} aria-label={isPlaying ? '暂停播放' : '开始播放'}>{isPlaying ? <PauseRounded /> : <PlayArrowRounded />}</button>
+          <button className="icon-button" onClick={() => void perform(skipNext)} disabled={busy || (!currentSong && !isPreview)} title="为大家切换下一首" aria-label="下一首"><SkipNextRounded /></button>
+        </div>
+        <button className={'icon-button lyrics-toggle ' + (showLyrics ? 'is-active' : '')} onClick={onToggleLyrics} aria-label={showLyrics ? '隐藏歌词' : '显示歌词'} aria-pressed={showLyrics} title="切换歌词"><LyricsOutlined /></button>
+        <div className="volume-control">
+          <button className="icon-button" onClick={() => { if (volume) { lastVolume.current = volume; setVolume(0); } else setVolume(lastVolume.current); }} aria-label={volume ? '静音' : '取消静音'} title={volume ? '静音' : '取消静音'}>{volume ? <VolumeUpRounded /> : <VolumeOffRounded />}</button>
+          <input aria-label="音量" type="range" min="0" max="100" value={volume} onChange={event => setVolume(Number(event.target.value))} />
+        </div>
+        <button className="icon-button fullscreen-button" onClick={() => void perform(toggleFullscreen)} aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'}>{fullscreen ? <FullscreenExitRounded /> : <FullscreenRounded />}</button>
+      </div>
+      <audio ref={audioRef} hidden onTimeUpdate={event => setCurrentPosition(event.currentTarget.currentTime * 1000)} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => { if (audioUrl) { setIsPlaying(false); setNotice('这首歌暂时无法播放，请重新同步或切换歌曲'); } }} />
+    </section>
+  );
 }

@@ -19,6 +19,9 @@ export function setupWebSocketServer(server: Server) {
     wss.on('connection', (ws: WebSocket) => {
         let username: string | undefined;
 
+        // Guests can see listening presence without creating a fake user identity.
+        ws.send(JSON.stringify({ type: 'update', users: Array.from(onlineUsers) }));
+
         // 新连接：如果有正在播放的歌曲，推送当前播放状态
         if (currentSong && currentStartTime) {
             ws.send(JSON.stringify({

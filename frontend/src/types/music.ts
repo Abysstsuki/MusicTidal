@@ -12,3 +12,18 @@ export interface SongSearchResponse {
   offset?: number;
   limit?: number;
 }
+
+export interface QueueSong extends Song {
+  instanceId: number;
+}
+
+export interface ChatMessage {
+  username: string;
+  text: string;
+}
+
+export interface PlaybackSnapshot {
+  song: Song | null;
+  url: string;
+  startTime: number;
+}

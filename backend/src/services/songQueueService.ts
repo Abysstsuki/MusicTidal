@@ -1,96 +1,91 @@
 import { Song, SongWithInstance } from '../types/song';
 import { broadcast, setCurrentSongInfo } from './websocketServer';
-import { getSongPlayInfo } from '../services/netease/song.service';
+import { getSongPlayInfo } from './netease/song.service';
+
 class SongQueueService {
   private queue: SongWithInstance[] = [];
   private currentInstanceId = 0;
   private currentSong: { song: Song; startTime: number } | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private loading = false;
+  private generation = 0;
 
-  getCurrentSong() {
-    return this.currentSong;
-  }
+  getCurrentSong() { return this.currentSong; }
+  getQueue() { return this.queue; }
+  peek() { return this.queue[0]; }
+
   enqueue(song: Song) {
-    const instanceId = ++this.currentInstanceId;
-    const songWithInstance = { ...song, instanceId };
-    this.queue.push(songWithInstance);
+    const added = { ...song, instanceId: ++this.currentInstanceId };
+    this.queue.push(added);
     this.broadcastQueue();
-    this.startNextSongIfIdle();
-    return songWithInstance;
+    void this.startNextSongIfIdle();
+    return added;
   }
 
-  
-  dequeue() {
-    return this.queue.shift();
-  }
-
-  getQueue() {
-    return this.queue;
-  }
-
-  peek() {
-    return this.queue[0];
-  }
-
-  clear() {
-    this.queue = [];
-    this.broadcastQueue();
-  }
-
+  dequeue() { return this.queue.shift(); }
+  clear() { this.queue = []; this.broadcastQueue(); }
   removeById(instanceId: number) {
-    this.queue = this.queue.filter(s => s.instanceId !== instanceId);
+    this.queue = this.queue.filter(song => song.instanceId !== instanceId);
     this.broadcastQueue();
   }
-
   moveToTop(instanceId: number) {
-    const index = this.queue.findIndex(s => s.instanceId === instanceId);
+    const index = this.queue.findIndex(song => song.instanceId === instanceId);
     if (index !== -1) {
       const [song] = this.queue.splice(index, 1);
       this.queue.unshift(song);
       this.broadcastQueue();
     }
   }
+
   async startNextSongIfIdle() {
-    if (this.currentSong || this.queue.length === 0) return;
-    const nextSong = this.dequeue();
-    if (!nextSong) return;
-    const playInfo = await getSongPlayInfo(nextSong.id.toString());
-    if (!playInfo?.url) return;
-
-    const startTime = Date.now();
-    this.currentSong = { song: nextSong, startTime };
-
-    // 同步到 WebSocket 服务端，确保新连接能收到当前播放状态
-    setCurrentSongInfo(nextSong, playInfo.url, startTime);
-
-    // 通知所有客户端
-    broadcast({
-      type: 'PLAY_SONG',
-      payload: {
-        song: nextSong,
-        url: playInfo.url,
-        startTime,
-      },
-    });
-
-    // 定时播放下一首
-    setTimeout(() => {
-      this.currentSong = null;
-      setCurrentSongInfo(null, '', 0); // 清除 WebSocket 状态
-      this.startNextSongIfIdle(); // 自动播放下一首
-    }, nextSong.duration * 1000); // duration 单位：秒
+    if (this.currentSong || this.loading || !this.queue.length) return;
+    this.loading = true;
+    const generation = this.generation;
+    const nextSong = this.dequeue()!;
+    this.broadcastQueue();
+    try {
+      const playInfo = await getSongPlayInfo(String(nextSong.id));
+      if (generation !== this.generation) return;
+      if (!playInfo?.url) throw new Error('No playable URL');
+      const duration = nextSong.duration > 0 ? nextSong.duration : playInfo.time;
+      if (!Number.isFinite(duration) || duration <= 0) throw new Error('Invalid song duration');
+      const song = { ...nextSong, duration };
+      const startTime = Date.now();
+      this.currentSong = { song, startTime };
+      setCurrentSongInfo(song, playInfo.url, startTime);
+      broadcast({ type: 'PLAY_SONG', payload: { song, url: playInfo.url, startTime } });
+      // Song duration is milliseconds. Only the server advances shared playback.
+      this.timer = setTimeout(() => {
+        if (generation !== this.generation) return;
+        this.timer = null;
+        this.finishCurrentSong();
+        void this.startNextSongIfIdle();
+      }, duration);
+    } catch {
+      if (generation === this.generation) console.warn('Skipping unavailable track:', nextSong.id);
+    } finally {
+      if (generation === this.generation) {
+        this.loading = false;
+        if (!this.currentSong) void this.startNextSongIfIdle();
+      }
+    }
   }
 
   skipToNext() {
-    // 停止当前歌曲
-    this.currentSong = null;
-    setCurrentSongInfo(null, '', 0); // 清除 WebSocket 状态
-    // 立即开始下一首
-    this.startNextSongIfIdle();
+    this.generation += 1;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.loading = false;
+    this.finishCurrentSong();
+    void this.startNextSongIfIdle();
   }
 
-  private broadcastQueue() {
-    broadcast({ type: 'QUEUE_UPDATED', payload: this.queue });
+  private finishCurrentSong() {
+    this.currentSong = null;
+    setCurrentSongInfo(null, '', 0);
+    broadcast({ type: 'PLAY_SONG', payload: { song: null, url: '', startTime: 0 } });
   }
+  private broadcastQueue() { broadcast({ type: 'QUEUE_UPDATED', payload: this.queue }); }
 }
 
 export const songQueueService = new SongQueueService();

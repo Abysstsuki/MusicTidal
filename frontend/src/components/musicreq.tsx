@@ -1,308 +1,81 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import MusicItem from './modelItem/MusicItem';
-import SimpleBar from 'simplebar-react';
-import 'simplebar-react/dist/simplebar.min.css';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import SearchRounded from '@mui/icons-material/SearchRounded';
+import AddRounded from '@mui/icons-material/AddRounded';
+import CheckRounded from '@mui/icons-material/CheckRounded';
+import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import { useMusicContext } from '@/contexts/MusicContext';
+import { apiRequest } from '@/lib/api';
+import { previewQueue, previewSong } from '@/lib/stage-preview';
 import type { Song, SongSearchResponse } from '@/types/music';
-import { BACKEND_URL } from '@/lib/api';
-
-interface MusicReqProps {
-    isVisible: boolean;
-}
+import SongCover from './modelItem/SongCover';
+import { formatDuration } from './musicplayer';
 
 const PAGE_SIZE = 10;
 
-type ToastState = {
-    title: string;
-    message: string;
-    tone: 'success' | 'error';
-};
-
-export default function MusicReq({ isVisible }: MusicReqProps) {
-    const [searchInput, setSearchInput] = useState('');
-    const [songs, setSongs] = useState<Song[]>([]);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [loading, setLoading] = useState(false);
-    const [toast, setToast] = useState<ToastState | null>(null);
-    const lastKeyword = useRef('');
-    const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-    const showToast = (nextToast: ToastState) => {
-        if (toastTimerRef.current) {
-            clearTimeout(toastTimerRef.current);
-        }
-
-        setToast(nextToast);
-        toastTimerRef.current = setTimeout(() => {
-            setToast(null);
-            toastTimerRef.current = null;
-        }, 2600);
-    };
-
-    useEffect(() => {
-        return () => {
-            if (toastTimerRef.current) {
-                clearTimeout(toastTimerRef.current);
-            }
-        };
-    }, []);
-
-    const handleEnqueue = async (song: Song) => {
-        try {
-            const res = await fetch(`${BACKEND_URL}/api/queue/add`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ song }),
-            });
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || '加入队列失败');
-            }
-
-            showToast({
-                title: 'TRACK ADDED',
-                message: song.name,
-                tone: 'success',
-            });
-        } catch (err) {
-            console.error('点歌失败', err);
-            showToast({
-                title: 'ADD FAILED',
-                message: err instanceof Error ? err.message : 'Please try again later',
-                tone: 'error',
-            });
-        }
-    };
-
-    const fetchPage = async (keyword: string, page: number) => {
-        setLoading(true);
-        try {
-            const offset = (page - 1) * PAGE_SIZE;
-            const res = await fetch(
-                `${BACKEND_URL}/api/netease/song/search?keywords=${encodeURIComponent(keyword)}&offset=${offset}&limit=${PAGE_SIZE}`
-            );
-            const data: SongSearchResponse = await res.json();
-
-            if (data.success && Array.isArray(data.data)) {
-                setSongs(data.data);
-                const total = data.total ?? 0;
-                setTotalPages(total > 0 ? Math.ceil(total / PAGE_SIZE) : 1);
-            } else {
-                setSongs([]);
-                setTotalPages(1);
-            }
-        } catch (err) {
-            console.error('搜索出错:', err);
-            setSongs([]);
-            setTotalPages(1);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSearch = async () => {
-        const term = searchInput.trim();
-        if (!term) return;
-
-        lastKeyword.current = term;
-        setSearchInput('');
-        setCurrentPage(1);
-        await fetchPage(term, 1);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') handleSearch();
-    };
-
-    const goToPage = (page: number) => {
-        if (page < 1 || page > totalPages || page === currentPage || !lastKeyword.current) return;
-        setCurrentPage(page);
-        fetchPage(lastKeyword.current, page);
-    };
-
-    const hasSearched = lastKeyword.current !== '';
-
-    return (
-    <div className={`flex h-full w-full p-3 relative overflow-hidden ${isVisible ? '' : 'hidden'}`}>
-        {toast && (
-            <div
-                role="status"
-                aria-live="polite"
-                className="fixed right-6 top-6 z-[9998] max-w-[320px]"
-                style={{
-                    border: `1px solid ${toast.tone === 'success' ? 'var(--accent-blue-line)' : 'rgba(255,107,122,0.45)'}`,
-                    background: 'var(--bg-panel-strong)',
-                    boxShadow: '0 18px 45px rgba(0,0,0,0.38)',
-                    padding: '12px 14px',
-                    backdropFilter: 'blur(18px)',
-                    animation: 'toast-in 220ms ease-out',
-                }}
-            >
-                <div
-                    style={{
-                        fontSize: '9px',
-                        letterSpacing: '0.28em',
-                        color: toast.tone === 'success' ? 'var(--accent-blue)' : 'var(--danger)',
-                        marginBottom: 6,
-                    }}
-                >
-                    {toast.title}
-                </div>
-                <div
-                    className="truncate"
-                    style={{
-                        color: 'var(--text-primary)',
-                        fontSize: '13px',
-                        lineHeight: 1.35,
-                    }}
-                >
-                    {toast.message}
-                </div>
-            </div>
-        )}
-        <div className="p-6 w-full max-w-full mx-auto relative z-10 flex flex-col h-full min-h-0"
-             style={{ border: '1px solid var(--line)', background: 'var(--bg-panel)' }}>
-
-            {/* Search bar */}
-            <div className="mb-4 flex space-x-2">
-                <input
-                    type="text"
-                    placeholder="SEARCH_TRACK / ARTIST..."
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    style={{
-                        flex: 1,
-                        border: '1px solid var(--line)',
-                        background: 'transparent',
-                        padding: '6px 10px',
-                        color: 'var(--text-primary)',
-                        fontSize: '11px',
-                        outline: 'none'
-                    }}
-                />
-                <button
-                    onClick={handleSearch}
-                    disabled={loading}
-                    style={{
-                        padding: '6px 14px',
-                        border: '1px solid var(--accent-blue-line)',
-                        fontSize: '9px',
-                        letterSpacing: '0.3em',
-                        color: 'var(--accent-blue)',
-                        background: 'transparent',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        opacity: loading ? 0.5 : 1
-                    }}
-                >
-                    {loading ? '搜索中...' : 'SEARCH'}
-                </button>
-            </div>
-
-            {/* List */}
-            <div className="flex-1 overflow-hidden">
-                <SimpleBar style={{ maxHeight: '100%' }} autoHide={true}>
-                    <div className="space-y-1">
-                        {!hasSearched && !loading && (
-                            <p className="text-center py-8" style={{ color: 'var(--text-secondary)', fontSize: '13px', opacity: 0.5 }}>请输入关键词搜索歌曲</p>
-                        )}
-                        {hasSearched && songs.length === 0 && !loading && (
-                            <p className="text-center py-8" style={{ color: 'var(--text-secondary)', fontSize: '13px', opacity: 0.5 }}>未找到结果</p>
-                        )}
-                        {songs.map((song, index) => (
-                            <MusicItem
-                                id={song.id}
-                                key={song.id}
-                                index={index}
-                                prcUrl={song.prcUrl}
-                                name={song.name}
-                                artist={song.artist}
-                                duration={song.duration}
-                            >
-                                <button
-                                    style={{
-                                        padding: '2px 8px',
-                                        border: '1px solid var(--accent-blue-line)',
-                                        fontSize: '8px',
-                                        letterSpacing: '0.2em',
-                                        color: 'var(--accent-blue)',
-                                        background: 'transparent',
-                                        cursor: 'pointer'
-                                    }}
-                                    onClick={() => handleEnqueue(song)}
-                                >
-                                    ADD
-                                </button>
-                            </MusicItem>
-                        ))}
-                    </div>
-                </SimpleBar>
-            </div>
-
-            {/* Pagination */}
-            {hasSearched && totalPages > 1 && (
-                <div className="mt-3 flex justify-center items-center space-x-2">
-                    <button onClick={() => goToPage(1)}
-                            disabled={currentPage === 1}
-                            style={{
-                                padding: '2px 6px',
-                                border: '1px solid var(--line)',
-                                fontSize: '9px',
-                                letterSpacing: '0.2em',
-                                color: currentPage === 1 ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
-                                background: 'transparent',
-                                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-                            }}>
-                        «
-                    </button>
-                    <button onClick={() => goToPage(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            style={{
-                                padding: '4px 8px',
-                                border: '1px solid var(--line)',
-                                fontSize: '9px',
-                                letterSpacing: '0.2em',
-                                color: currentPage === 1 ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
-                                background: 'transparent',
-                                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-                            }}>
-                        PREV
-                    </button>
-                    <span style={{ fontSize: '9px', color: 'var(--text-secondary)', padding: '0 8px' }}>
-                        PAGE {currentPage} / {totalPages}
-                    </span>
-                    <button onClick={() => goToPage(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            style={{
-                                padding: '4px 8px',
-                                border: '1px solid var(--line)',
-                                fontSize: '9px',
-                                letterSpacing: '0.2em',
-                                color: currentPage === totalPages ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
-                                background: 'transparent',
-                                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
-                            }}>
-                        NEXT
-                    </button>
-                    <button onClick={() => goToPage(totalPages)}
-                            disabled={currentPage === totalPages}
-                            style={{
-                                padding: '2px 6px',
-                                border: '1px solid var(--line)',
-                                fontSize: '9px',
-                                letterSpacing: '0.2em',
-                                color: currentPage === totalPages ? 'rgba(115,129,155,0.45)' : 'var(--text-muted)',
-                                background: 'transparent',
-                                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
-                            }}>
-                        »
-                    </button>
-                </div>
-            )}
-        </div>
+export default function MusicReq({ isVisible }: { isVisible: boolean }) {
+  const { enqueue, isPreview } = useMusicContext();
+  const [query, setQuery] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pending, setPending] = useState<number | null>(null);
+  const [added, setAdded] = useState<number | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (isVisible) inputRef.current?.focus(); }, [isVisible]);
+  useEffect(() => () => requestRef.current?.abort(), []);
+  const search = async (term: string, nextPage = 1) => {
+    if (!term.trim()) return;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoading(true); setError(''); setNotice(''); setKeyword(term); setPage(nextPage);
+    try {
+      if (isPreview) {
+        const candidates = [previewSong, ...previewQueue];
+        setSongs(candidates.filter(song => (song.name + song.artist).toLowerCase().includes(term.toLowerCase())));
+        setPages(1);
+      } else {
+        const data = await apiRequest<SongSearchResponse>('/api/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
+        if (!data.success) throw new Error('歌曲暂时无法搜索，请稍后重试');
+        if (!controller.signal.aborted) { setSongs(data.data); setPages(Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))); }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) { setError((err as Error).message); setSongs([]); }
+    } finally { if (!controller.signal.aborted) setLoading(false); }
+  };
+  const add = async (song: Song) => {
+    setPending(song.id); setError(''); setNotice('');
+    try { await enqueue(song); setAdded(song.id); setNotice('已加入待播 · ' + song.name); }
+    catch (err) { setError((err as Error).message); }
+    finally { setPending(null); }
+  };
+  const submit = (event: FormEvent) => { event.preventDefault(); void search(query.trim()); };
+  return <div className="search-content">
+    <p className="panel-description">{isPreview ? '视觉预览：可搜索 Die For You、夜曲或海阔天空' : '搜索歌名或歌手，放进大家的播放队列。'}</p>
+    <form className="song-search" onSubmit={submit}>
+      <SearchRounded fontSize="small" />
+      <input ref={inputRef} aria-label="搜索歌曲或歌手" placeholder="搜索歌曲或歌手…" value={query} onChange={event => setQuery(event.target.value)} maxLength={100} />
+      <button type="submit" disabled={loading || !query.trim()}>{loading ? '搜索中' : '搜索'}</button>
+    </form>
+    {error && <p className="inline-error" role="status">{error}</p>}
+    {notice && <p className="inline-success" role="status">{notice}</p>}
+    <div className="song-list" aria-busy={loading}>
+      {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '这一首，想听什么？'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map(song => <div className="song-row" key={song.id}>
+        <SongCover src={song.prcUrl} /><div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}</span></div>
+        <button className="icon-button add-song-button" onClick={() => void add(song)} disabled={pending !== null} aria-label={'点歌 ' + song.name} title="加入待播">{added === song.id ? <CheckRounded /> : <AddRounded />}</button>
+      </div>)}
     </div>
-    );
+    {pages > 1 && <nav className="search-pagination" aria-label="搜索分页">
+      <button className="icon-button" onClick={() => void search(keyword, page - 1)} disabled={page <= 1 || loading} aria-label="上一页"><ChevronLeftRounded /></button>
+      <span>{page} / {pages}</span><button className="icon-button" onClick={() => void search(keyword, page + 1)} disabled={page >= pages || loading} aria-label="下一页"><ChevronRightRounded /></button>
+    </nav>}
+  </div>;
 }

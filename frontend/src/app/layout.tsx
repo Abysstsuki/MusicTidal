@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Music Tidal",
-  description: "Powered by AbyssTsuki",
+  title: "MusicTidal · 和你同频",
+  description: "一首歌，一段对话，一个共同的此刻。和大家一起同步听歌。",
 };
 
 export default function RootLayout({
@@ -22,22 +22,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased`}
       >
-        {/* Scanline overlay */}
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            width: '100%',
-            height: '1px',
-            background: 'linear-gradient(90deg, transparent, rgba(99,179,255,0.16), transparent)',
-            animation: 'scanline 8s linear infinite',
-            pointerEvents: 'none',
-            zIndex: 9999,
-          }}
-        />
-        <div className="relative z-10">
-          {children}
-        </div>
+        {children}
       </body>
     </html>
   );

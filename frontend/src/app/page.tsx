@@ -1,6 +1,13 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
+import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
+import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
+import QueueMusicRounded from '@mui/icons-material/QueueMusicRounded';
+import CloseRounded from '@mui/icons-material/CloseRounded';
 import MusicPlayer from '@/components/musicplayer';
 import MusicLyrics from '@/components/musiclyrics';
 import ChatBox from '@/components/chatbox';
@@ -8,197 +15,110 @@ import MusicQueue from '@/components/musicqueue';
 import UserInfo from '@/components/userinfo';
 import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
-import MobileTabBar from '@/components/MobileTabBar';
-import { useIsMobile } from '@/hooks/useIsMobile';
 import { MusicProvider, useMusicContext } from '@/contexts/MusicContext';
 
-type MobileTab = 'info' | 'request' | 'lyrics' | 'chat' | 'queue';
+type Panel = 'chat' | 'queue' | 'search' | null;
 
-function BackgroundLayer() {
-    const { currentSong } = useMusicContext();
+function StageBackground({ src }: { src?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return <Image className={'stage-background ' + (loaded ? 'is-loaded' : '')} src={src} alt="" aria-hidden="true" fill priority sizes="100vw" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />;
+}
 
-    return (
-        <>
-            {currentSong?.prcUrl && (
-                <div
-                    style={{
-                        position: 'fixed', inset: 0, zIndex: -2,
-                        backgroundImage: `url(${currentSong.prcUrl})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        filter: 'blur(40px) saturate(1.2)',
-                        transform: 'scale(1.1)',
-                        opacity: 0.42,
-                        transition: 'background-image 1s ease',
-                        pointerEvents: 'none',
-                    }}
-                />
-            )}
-            <div
-                className="grid-overlay"
-                style={{
-                    position: 'fixed', inset: 0, zIndex: currentSong?.prcUrl ? -3 : -1,
-                    opacity: currentSong?.prcUrl ? 0.18 : 0.85,
-                    pointerEvents: 'none',
-                }}
-            />
-        </>
-    );
+function Stage() {
+  const { currentSong, connection, queue, isPreview } = useMusicContext();
+  const [panel, setPanel] = useState<Panel>('chat');
+  const [showLyrics, setShowLyrics] = useState(true);
+  const panelRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const closePanel = () => {
+    setPanel(null);
+    triggerRef.current?.focus();
+  };
+  const togglePanel = (next: Exclude<Panel, null>, trigger: HTMLButtonElement) => {
+    triggerRef.current = trigger;
+    setPanel(value => value === next ? null : next);
+  };
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1100px)');
+    const collapse = () => { if (media.matches) setPanel(null); };
+    collapse();
+    media.addEventListener('change', collapse);
+    return () => media.removeEventListener('change', collapse);
+  }, []);
+  useEffect(() => {
+    if (!panel) return;
+    if (triggerRef.current) {
+      const target = panel === 'search' ? 'input' : '[data-close-panel]';
+      panelRef.current?.querySelector<HTMLElement>(target)?.focus();
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPanel(null);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panel]);
+  const status = isPreview ? '视觉预览' : { connected: '同步中', connecting: '连接中', reconnecting: '重新连接', offline: '等待连接' }[connection];
+
+  return (
+    <main className="music-stage">
+      <StageBackground key={currentSong?.prcUrl || 'empty'} src={currentSong?.prcUrl} />
+      <div className="stage-shade" aria-hidden="true" />
+      <header className="stage-header">
+        <Link className="wordmark" href="/" aria-label="MusicTidal 首页" onClick={event => { if (isPreview) { event.preventDefault(); window.location.assign('/'); } }}>Music<span>Tidal</span></Link>
+        <div className={'connection-status ' + (connection === 'connected' ? 'is-connected' : '')} role="status">
+          <GraphicEqRounded fontSize="small" /><span>{status}</span><i />
+        </div>
+        <div className="header-actions">
+          <OnlineUser />
+          <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
+            <MusicNoteRounded fontSize="small" /><span>点歌</span>
+          </button>
+          <UserInfo />
+        </div>
+      </header>
+
+      <section className="track-heading" aria-label="当前歌曲">
+        <p className="eyebrow">NOW PLAYING</p>
+        <h1>{currentSong?.name || '等待第一首歌'}</h1>
+        <p className="track-artist">{currentSong?.artist || '一起，让音乐发生。'}</p>
+        <p className="track-note">{isPreview ? '演示歌曲 · 仅供视觉预览' : currentSong ? '此刻，和大家一起听' : '点一首歌，分享此刻的心情'}</p>
+      </section>
+
+      {showLyrics && <MusicLyrics />}
+      {!showLyrics && <div className="lyrics-hidden-label">让音乐填满这一刻。</div>}
+
+      <nav className="stage-tools" aria-label="听歌互动">
+        <button className={'pill-button chat-launch ' + (panel === 'chat' ? 'is-active' : '')} onClick={event => togglePanel('chat', event.currentTarget)} aria-expanded={panel === 'chat'} aria-controls="stage-panel">
+          <ChatBubbleOutlineRounded fontSize="small" /><span>聊天</span>
+        </button>
+        <button className={'pill-button ' + (panel === 'queue' ? 'is-active' : '')} onClick={event => togglePanel('queue', event.currentTarget)} aria-expanded={panel === 'queue'} aria-controls="stage-panel">
+          <QueueMusicRounded fontSize="small" /><span>待播</span><span className="queue-count">{String(queue.length).padStart(2, '0')}</span>
+        </button>
+      </nav>
+
+      {panel && (
+        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
+          <div className="popover-heading">
+            <h2>{panel === 'search' ? <><MusicNoteRounded />点一首，大家一起听</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
+            <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
+          </div>
+          {panel === 'chat' && <ChatBox />}
+          {panel === 'queue' && <MusicQueue />}
+          {panel === 'search' && <MusicReq isVisible />}
+        </aside>
+      )}
+
+      <MusicPlayer showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(value => !value)} />
+      {isPreview && <button className="preview-label" onClick={() => window.location.assign('/')}>视觉预览 · 返回真实听歌</button>}
+    </main>
+  );
 }
 
 export default function Home() {
-  const [activePanel, setActivePanel] = useState<'chat' | 'queue'>('chat');
-  const [leftPanel, setLeftPanel] = useState<'info' | 'request'>('info');
-  const [mobileTab, setMobileTab] = useState<MobileTab>('info');
-  const isMobile = useIsMobile();
-
-  const tabClass = (isActive: boolean) =>
-    `text-[9px] tracking-[0.3em] uppercase px-4 py-1 transition-all home-tab ${
-      isActive ? 'home-tab-active' : ''
-    }`;
-
-  return (
-    <MusicProvider>
-      <BackgroundLayer />
-      <div className="home-grid">
-        {/* ============ Desktop/Tablet Layout ============ */}
-        {!isMobile && (
-          <>
-            {/* Left Panel */}
-            <div className="grid-area-left flex flex-col p-3 relative min-w-0">
-              <div className="flex justify-center space-x-4 mb-2 flex-shrink-0">
-                <button
-                  onClick={() => setLeftPanel('info')}
-                  className={tabClass(leftPanel === 'info')}
-                >
-                  在线信息
-                </button>
-                <button
-                  onClick={() => setLeftPanel('request')}
-                  className={tabClass(leftPanel === 'request')}
-                >
-                  点歌
-                </button>
-              </div>
-              <div className="flex-1 w-full relative min-h-0">
-                <div
-                  className={`absolute inset-0 transition-opacity duration-300 ${
-                    leftPanel === 'info' ? 'block' : 'hidden'
-                  }`}
-                >
-                  <div className="h-1/2 w-full">
-                    <UserInfo />
-                  </div>
-                  <div className="h-1/2 w-full">
-                    <OnlineUser />
-                  </div>
-                </div>
-                <div
-                  className={`absolute inset-0 transition-opacity duration-300 ${
-                    leftPanel === 'request' ? 'block' : 'hidden'
-                  }`}
-                >
-                  <MusicReq isVisible={leftPanel === 'request'} />
-                </div>
-              </div>
-            </div>
-
-            {/* Lyrics */}
-            <div className="grid-area-lyrics">
-              <div className="w-full h-full">
-                <MusicLyrics />
-              </div>
-            </div>
-
-            {/* Right Panel */}
-            <div className="grid-area-right flex flex-col p-3 relative min-w-0">
-              <div className="flex justify-center space-x-4 mb-2 flex-shrink-0">
-                <button
-                  onClick={() => setActivePanel('chat')}
-                  className={tabClass(activePanel === 'chat')}
-                >
-                  聊天
-                </button>
-                <button
-                  onClick={() => setActivePanel('queue')}
-                  className={tabClass(activePanel === 'queue')}
-                >
-                  歌曲队列
-                </button>
-              </div>
-              <div className="flex-1 w-full relative min-h-0">
-                <div
-                  className={`absolute inset-0 transition-opacity duration-300 ${
-                    activePanel === 'chat' ? 'block' : 'hidden'
-                  }`}
-                >
-                  <ChatBox />
-                </div>
-                <div
-                  className={`absolute inset-0 transition-opacity duration-300 ${
-                    activePanel === 'queue' ? 'block' : 'hidden'
-                  }`}
-                >
-                  <MusicQueue />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ============ Player (all breakpoints) ============ */}
-        <div className="grid-area-player">
-          <div className="w-full h-full flex items-center justify-center">
-            <MusicPlayer />
-          </div>
-        </div>
-
-        {/* ============ Mobile Layout ============ */}
-        {isMobile && (
-          <>
-            {/* Mobile content panel */}
-            {mobileTab === 'info' && (
-              <div className="mobile-panel-visible">
-                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                  <div className="flex-1 min-h-0">
-                    <UserInfo />
-                  </div>
-                  <div className="flex-1 min-h-0">
-                    <OnlineUser />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mobileTab === 'request' && (
-              <div className="mobile-panel-visible">
-                <MusicReq isVisible={true} />
-              </div>
-            )}
-
-            {mobileTab === 'lyrics' && (
-              <div className="mobile-panel-visible">
-                <MusicLyrics />
-              </div>
-            )}
-
-            {mobileTab === 'chat' && (
-              <div className="mobile-panel-visible">
-                <ChatBox />
-              </div>
-            )}
-
-            {mobileTab === 'queue' && (
-              <div className="mobile-panel-visible">
-                <MusicQueue />
-              </div>
-            )}
-
-            {/* Mobile TabBar */}
-            <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
-          </>
-        )}
-      </div>
-    </MusicProvider>
-  );
+  return <MusicProvider><Stage /></MusicProvider>;
 }
