@@ -4,6 +4,7 @@ export interface Song {
   artist: string;
   prcUrl: string; // 封面图 URL
   duration: number;
+  source?: 'manual' | 'daily' | 'fm';
 }
 export interface SongSearchResponse {
   success: boolean;
@@ -15,6 +16,14 @@ export interface SongSearchResponse {
 
 export interface QueueSong extends Song {
   instanceId: number;
+}
+
+export interface RecommendationState {
+  enabled: boolean;
+  loading: boolean;
+  phase: 'daily' | 'fm' | null;
+  queued: number;
+  error: string | null;
 }
 
 export interface ChatMessage {

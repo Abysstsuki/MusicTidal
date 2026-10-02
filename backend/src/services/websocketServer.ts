@@ -42,6 +42,7 @@ export function setupWebSocketServer(server: Server) {
                 type: 'QUEUE_UPDATED',
                 payload: queue,
             }));
+            ws.send(JSON.stringify({ type: 'RECOMMENDATIONS_UPDATED', payload: songQueueService.getRecommendationState() }));
         } catch (e) {
             // songQueueService 可能尚未初始化，忽略
         }

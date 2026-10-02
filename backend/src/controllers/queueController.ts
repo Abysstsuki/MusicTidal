@@ -17,7 +17,7 @@ export const addSongToQueue = (req: Request, res: Response) => {
 };
 
 export const getQueue = (_req: Request, res: Response) => {
-    res.status(200).json({ queue: songQueueService.getQueue() });
+    res.status(200).json({ queue: songQueueService.getQueue(), recommendations: songQueueService.getRecommendationState() });
     return;
 };
 
@@ -68,4 +68,17 @@ export const skipToNextHandler = (_req: Request, res: Response) => {
     songQueueService.skipToNext();
     res.status(200).json({ success: true, message: '已跳到下一首' });
     return;
+};
+
+export const startDailyRecommendationsHandler = async (_req: Request, res: Response) => {
+    try {
+        const recommendations = await songQueueService.startDailyRecommendations();
+        res.json({ success: true, recommendations });
+    } catch (error) {
+        res.status(502).json({ error: (error as Error).message });
+    }
+};
+
+export const stopRecommendationsHandler = (_req: Request, res: Response) => {
+    res.json({ success: true, recommendations: songQueueService.stopRecommendations() });
 };

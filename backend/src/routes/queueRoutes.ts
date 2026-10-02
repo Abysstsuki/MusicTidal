@@ -5,7 +5,9 @@ import {
     removeFromQueueHandler,
     moveToTopHandler,
     getCurrentPlayingSong,
-    skipToNextHandler
+    skipToNextHandler,
+    startDailyRecommendationsHandler,
+    stopRecommendationsHandler
 } from '../controllers/queueController';
 
 const router = express.Router();
@@ -16,5 +18,7 @@ router.post('/remove', removeFromQueueHandler);
 router.post('/moveTop', moveToTopHandler);
 router.post('/skipNext', skipToNextHandler);
 router.get('/currentPlaying', getCurrentPlayingSong);
+router.post('/recommendations/start', startDailyRecommendationsHandler);
+router.post('/recommendations/stop', stopRecommendationsHandler);
 
 export default router;
