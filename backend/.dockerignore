@@ -1,0 +1,24 @@
+# Install dependencies and generate the Linux Prisma client inside the image.
+node_modules
+**/node_modules
+dist
+src/generated/prisma
+
+# Inject credentials at runtime; never send them in the build context.
+.env*
+**/.env*
+cookie.txt
+**/cookie.txt
+anonymous_token
+**/anonymous_token
+*.pem
+**/*.pem
+*.key
+**/*.key
+
+.git
+.vercel
+coverage
+tests
+*.log
+*.tsbuildinfo
