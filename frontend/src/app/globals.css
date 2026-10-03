@@ -279,6 +279,10 @@ button svg { flex-shrink: 0; }
 .auth-form { padding: 0 24px 20px; display: flex; flex-direction: column; gap: 16px; }
 .auth-form label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .auth-form input { color: var(--text-primary); border: 1px solid var(--line); background: rgba(255,255,255,.025); border-radius: 9px; padding: 12px; font-size: 14px; }
+.password-field { display: block; position: relative; }
+.auth-form .password-field input { width: 100%; padding-right: 50px; }
+.password-field .password-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); }
+.password-field input::-ms-reveal { display: none; }
 .primary-button { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px; border: 1px solid #ff6b7c; border-radius: 10px; color: white; background: #d62b40; }
 .auth-switch { border: 0; background: transparent; font-size: 12px; color: var(--text-secondary); padding: 5px 0; }
 .listener-list { padding: 12px 20px; max-height: 380px; overflow-y: auto; }

@@ -1,13 +1,13 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { loginUser, registerUser } from '../services/userService';
 
-export const register = async (req: Request, res: Response) => {
-  const { username, email, password } = req.body;
+export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const { username, email, password } = req.body;
     const user = await registerUser(username, email, password);
     res.status(201).json(user);
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+  } catch (err) {
+    next(err);
   }
 };
 
