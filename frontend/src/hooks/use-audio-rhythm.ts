@@ -22,7 +22,8 @@ export function useAudioRhythm(audioRef: RefObject<HTMLAudioElement | null>, rea
     if (disposalTimer.current) clearTimeout(disposalTimer.current);
     let disposed = false;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const enabled = (graph: Graph) => !document.hidden && !reduced.matches && !graph.audio.paused && !graph.audio.ended && graph.context.state === 'running';
+    const enabled = (graph: Graph) => !document.hidden && !reduced.matches && !graph.audio.paused && !graph.audio.ended
+      && !graph.audio.muted && graph.audio.volume > 0 && graph.context.state === 'running';
     const resetSampling = () => {
       const graph = graphRef.current;
       if (!graph) return;
@@ -51,7 +52,14 @@ export function useAudioRhythm(audioRef: RefObject<HTMLAudioElement | null>, rea
           if (disposed || graphRef.current !== graph || data.version !== graph.version || !enabled(graph)) return;
           // Avoid replaying queued transients after the main thread becomes busy.
           if (graph.context.currentTime - data.time > 0.15) return;
-          try { detector.ingest(data.buffer, data.time); }
+          try {
+            // MediaElementAudioSource includes the element's volume. Restore
+            // the original amplitude in this silent analysis branch so the
+            // demo's absolute RMS thresholds work at any listening volume.
+            const volume = graph.audio.volume;
+            if (volume < 1) for (let i = 0; i < data.buffer.length; i++) data.buffer[i] /= volume;
+            detector.ingest(data.buffer, data.time);
+          }
           catch (error) {
             if (process.env.NODE_ENV !== 'production') console.warn('Lyric rhythm extraction unavailable', error);
             reader.current = quietRhythm;
@@ -127,7 +135,7 @@ export function useAudioRhythm(audioRef: RefObject<HTMLAudioElement | null>, rea
       resetSampling();
     };
     const onVisibility = () => { if (!document.hidden) connect(); resetSampling(); };
-    const mediaEvents = ['playing', 'pause', 'ended', 'emptied', 'seeking', 'seeked'];
+    const mediaEvents = ['playing', 'pause', 'ended', 'emptied', 'seeking', 'seeked', 'volumechange'];
     document.addEventListener('click', onGesture, true);
     document.addEventListener('keydown', onGesture, true);
     for (const name of mediaEvents) document.addEventListener(name, onMedia, true);

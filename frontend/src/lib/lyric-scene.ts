@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { RhythmFrame } from '@/lib/audio-rhythm';
+import rhythmConfig from '@/lib/rhythm-config.json';
 
 type MotionState = { playing: boolean; preview: boolean; rhythm: RhythmFrame };
 const PADDING = 64;
-const MAX_LYRIC_SCALE = 1.3;
+const MAX_LYRIC_SCALE = rhythmConfig.scale;
 
 // Rasterize the browser's actual text layout, preserving its font, wrapping and translation.
 function paintLyrics(copy: HTMLElement, canvas: HTMLCanvasElement, width: number, height: number, density: number, activeLayer: boolean) {
@@ -162,7 +163,7 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     const t = now / 1000;
     // Preview has no audio. A demo envelope is confined to the visual-preview route.
     const demoAge = t % 0.72;
-    const rhythm = motion.preview ? { energy: 0.6, bassWeight: 0.7, pulse: Math.exp(-Math.max(0, demoAge - 0.045) * 10) } : motion.rhythm;
+    const rhythm = motion.preview ? { energy: 0.6, bassWeight: 0.7, pulse: Math.exp(-Math.max(0, demoAge - rhythmConfig.hold) * rhythmConfig.release) } : motion.rhythm;
     const blend = 1 - Math.exp(-dt * 9);
     strength += ((motion.playing ? 1 : 0) - strength) * blend;
     const beat = rhythm.pulse * strength;
