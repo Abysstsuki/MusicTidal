@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import VerticalAlignTopRounded from '@mui/icons-material/VerticalAlignTopRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import QueueMusicRounded from '@mui/icons-material/QueueMusicRounded';
-import RadioRounded from '@mui/icons-material/RadioRounded';
+import FavoriteRounded from '@mui/icons-material/FavoriteRounded';
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import StopRounded from '@mui/icons-material/StopRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
@@ -31,30 +31,30 @@ export default function MusicQueue() {
     finally { if (version === modeActionVersion.current) setModePending(null); }
   };
   const recommendationStatus = recommendations.loading
-    ? '正在补充 FM…'
-    : recommendations.enabled ? '私人 FM · 续播中' : '私人 FM';
+    ? '正在获取心动推荐…'
+    : recommendations.enabled ? '心动模式 · 续播中' : '心动模式';
   return <div className={'queue-content ' + styles.content}>
     <div className={styles.card + (recommendations.enabled ? ' ' + styles.enabled : '')}>
       <div className={styles.heading}>
-        <RadioRounded />
+        <FavoriteRounded />
         <strong role="status">{recommendationStatus}</strong>
         <button className={styles.toggle} onClick={() => void toggleRecommendations()}
           disabled={modePending === 'stop' || (!recommendations.enabled && modePending === 'start')}
-          aria-label={recommendations.enabled ? '停止续播' : '开启 FM'}>
+          aria-label={recommendations.enabled ? '停止续播' : '开启心动模式'}>
           {recommendations.enabled ? <StopRounded /> : <PlayArrowRounded />}
-          {recommendations.enabled ? '停止续播' : modePending === 'start' ? '加载中…' : '开启 FM'}
+          {recommendations.enabled ? '停止续播' : modePending === 'start' ? '加载中…' : '开启心动模式'}
         </button>
       </div>
-      <p>{recommendations.enabled ? '手动点歌优先；停止后，当前歌曲继续播完。' : '自动补充 FM 歌曲，手动点歌优先。'}</p>
-      <span>基于房间的网易云账号 · 所有人同步收听</span>
+      <p>{recommendations.enabled ? '手动点歌优先；停止后，当前歌曲继续播完。' : '根据红心歌单推荐歌曲，手动点歌优先。'}</p>
+      <span>使用房间网易云账号的红心歌单 · 所有人同步收听</span>
     </div>
     {(error || recommendations.error) && <p className="inline-error" role="status">{error || recommendations.error}</p>}
     <div className="song-list">
-      {!queue.length && <div className="panel-empty"><QueueMusicRounded /><p>{recommendations.enabled ? '正在补充 FM 歌曲' : '暂无待播歌曲'}</p><span>{recommendations.enabled ? '点歌后会优先播放' : '可以点歌或开启 FM'}</span></div>}
+      {!queue.length && <div className="panel-empty"><QueueMusicRounded /><p>{recommendations.enabled ? '正在补充心动推荐' : '暂无待播歌曲'}</p><span>{recommendations.enabled ? '点歌后会优先播放' : '可以点歌或开启心动模式'}</span></div>}
       {queue.map((song, index) => <div className="song-row" key={song.instanceId}>
         <span className="song-index">{String(index + 1).padStart(2, '0')}</span>
         <SongCover src={song.prcUrl} />
-        <div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}{song.source === 'fm' ? <small className={styles.source}>FM</small> : null}</span></div>
+        <div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}{song.source === 'heart' ? <small className={styles.source}>心动</small> : null}</span></div>
         <div className="song-row-actions">
           <button className="icon-button" onClick={() => void perform(song.instanceId, () => moveToTop(song.instanceId))} disabled={pending !== null || index === 0} title="移到队首" aria-label={'置顶 ' + song.name}><VerticalAlignTopRounded fontSize="small" /></button>
           <button className="icon-button" onClick={() => void perform(song.instanceId, () => removeFromQueue(song.instanceId))} disabled={pending !== null} title="移出队列" aria-label={'移除 ' + song.name}><CloseRounded fontSize="small" /></button>

@@ -6,7 +6,7 @@ import {
     moveToTopHandler,
     getCurrentPlayingSong,
     skipToNextHandler,
-    startPersonalFmHandler,
+    startHeartModeHandler,
     stopRecommendationsHandler
 } from '../controllers/queueController';
 
@@ -18,7 +18,7 @@ router.post('/remove', removeFromQueueHandler);
 router.post('/moveTop', moveToTopHandler);
 router.post('/skipNext', skipToNextHandler);
 router.get('/currentPlaying', getCurrentPlayingSong);
-router.post('/recommendations/start', startPersonalFmHandler);
+router.post('/recommendations/start', startHeartModeHandler);
 router.post('/recommendations/stop', stopRecommendationsHandler);
 
 export default router;

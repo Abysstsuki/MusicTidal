@@ -20,4 +20,7 @@ export const lyric: NeteaseModule;
 export const user_account: NeteaseModule;
 export const recommend_songs: NeteaseModule;
 export const personal_fm: NeteaseModule;
+export const user_playlist: NeteaseModule;
+export const likelist: NeteaseModule;
+export const playmode_intelligence_list: NeteaseModule;
 export const register_anonimous: NeteaseModule;

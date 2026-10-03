@@ -1,7 +1,7 @@
 import { RecommendationState, Song, SongWithInstance } from '../types/song';
 import { broadcast, setCurrentSongInfo } from './websocketServer';
 import { getSongPlayInfo } from './netease/song.service';
-import { getPersonalFmSongs } from './netease/recommendation.service';
+import { HeartModeError, HeartModeSession } from './netease/recommendation.service';
 
 class SongQueueService {
   private queue: SongWithInstance[] = [];
@@ -13,7 +13,7 @@ class SongQueueService {
   private generation = 0;
   private recommendedQueue: SongWithInstance[] = [];
   private recommendationsEnabled = false;
-  private recommendationPhase: 'fm' | null = null;
+  private recommendationPhase: 'heart' | null = null;
   private recommendationLoading = false;
   private recommendationError: string | null = null;
   private recommendationGeneration = 0;
@@ -21,6 +21,7 @@ class SongQueueService {
   private refillRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private recentSongIds: number[] = [];
   private excludedRecommendationIds: number[] = [];
+  private heartModeSession: HeartModeSession | null = null;
 
   getCurrentSong() { return this.currentSong; }
   getQueue() { return [...this.queue, ...this.recommendedQueue]; }
@@ -64,12 +65,13 @@ class SongQueueService {
     }
   }
 
-  async startPersonalFm(): Promise<RecommendationState> {
+  async startHeartMode(): Promise<RecommendationState> {
     if (!this.recommendationsEnabled) {
       ++this.recommendationGeneration;
       this.recommendationsEnabled = true;
-      this.recommendationPhase = 'fm';
+      this.recommendationPhase = 'heart';
       this.recommendationError = null;
+      this.heartModeSession = new HeartModeSession(this.currentSong?.song.id);
       this.broadcastRecommendationState();
     }
     await this.refillRecommendations();
@@ -83,6 +85,7 @@ class SongQueueService {
     this.recommendationPhase = null;
     this.recommendationError = null;
     this.recommendedQueue = [];
+    this.heartModeSession = null;
     this.refillTask = null;
     if (this.refillRetryTimer) clearTimeout(this.refillRetryTimer);
     this.refillRetryTimer = null;
@@ -120,33 +123,34 @@ class SongQueueService {
   }
 
   private refillRecommendations(): Promise<void> {
-    if (!this.recommendationsEnabled || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
+    const session = this.heartModeSession;
+    if (!this.recommendationsEnabled || !session || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
     if (this.refillTask) return this.refillTask;
     const generation = this.recommendationGeneration;
     this.recommendationLoading = true;
-    this.recommendationPhase = 'fm';
+    this.recommendationPhase = 'heart';
     this.recommendationError = null;
     this.broadcastRecommendationState();
-    this.refillTask = this.loadPersonalFm(generation);
+    this.refillTask = this.loadHeartMode(generation, session);
     return this.refillTask;
   }
 
-  private async loadPersonalFm(generation: number) {
+  private async loadHeartMode(generation: number, session: HeartModeSession) {
     const candidates: Song[] = [];
     let added = 0;
     try {
-      // Bounded requests avoid spinning when FM returns duplicates or no songs.
+      // Bounded batches avoid spinning when heart mode returns duplicates or no songs.
       for (let attempt = 0; attempt < 3 && this.recommendedQueue.length < 3; ++attempt) {
-        const songs = await getPersonalFmSongs();
+        const songs = await session.nextSongs();
         if (generation !== this.recommendationGeneration) return;
         candidates.push(...songs);
         const fresh = this.filterFreshSongs(songs);
         const additions = fresh.slice(0, 3 - this.recommendedQueue.length);
         added += additions.length;
-        this.recommendedQueue.push(...additions.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'fm' as const })));
+        this.recommendedQueue.push(...additions.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'heart' as const })));
         if (additions.length) {
           this.broadcastQueue();
-          // Play the first available song while the remaining FM requests continue.
+          // Play the first available song while the remaining batches continue.
           void this.startNextSongIfIdle();
         }
       }
@@ -155,23 +159,30 @@ class SongQueueService {
         // Keep current, queued, skipped and unavailable songs excluded, as well as the last played song.
         const fallback = this.filterFreshSongs(candidates, true)
           .sort((a, b) => this.recentSongIds.indexOf(a.id) - this.recentSongIds.indexOf(b.id)).slice(0, 3);
-        this.recommendedQueue.push(...fallback.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'fm' as const })));
+        this.recommendedQueue.push(...fallback.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'heart' as const })));
         added += fallback.length;
       }
       if (!added && !this.recommendedQueue.length) {
-        this.recommendationError = '暂时没有可播放的 FM 歌曲，30 秒后自动重试';
-        console.warn('Private FM returned no eligible songs; retrying in 30 seconds.', { received: candidates.length });
+        this.recommendationError = '暂时没有可播放的心动推荐，30 秒后自动重试';
+        console.warn('Heart mode returned no eligible songs; retrying in 30 seconds.', { received: candidates.length });
       }
-    } catch {
+    } catch (error) {
       if (generation === this.recommendationGeneration) {
-        this.recommendationError = '私人 FM 请求失败，30 秒后自动重试';
-        console.warn('Private FM request failed; retrying in 30 seconds.');
+        const problem = error instanceof HeartModeError ? error : new HeartModeError('心动模式暂不可用', true);
+        this.recommendationError = problem.message + (problem.retryable ? '，30 秒后自动重试' : '');
+        if (!problem.retryable) {
+          this.recommendationsEnabled = false;
+          this.recommendationPhase = null;
+          this.recommendedQueue = [];
+          this.heartModeSession = null;
+        }
+        console.warn(problem.retryable ? 'Heart mode request failed; retrying in 30 seconds.' : 'Heart mode requires a logged-in account and a non-empty liked playlist.');
       }
     } finally {
       if (generation === this.recommendationGeneration) {
         this.recommendationLoading = false;
         this.refillTask = null;
-        if (this.recommendationError) {
+        if (this.recommendationsEnabled && this.recommendationError) {
           this.refillRetryTimer = setTimeout(() => {
             this.refillRetryTimer = null;
             if (generation === this.recommendationGeneration) void this.refillRecommendations();
@@ -221,7 +232,7 @@ class SongQueueService {
     } catch {
       if (generation === this.generation) {
         this.rememberSong(nextSong.id);
-        if (nextSong.source === 'fm') this.excludeRecommendation(nextSong.id);
+        if (nextSong.source === 'heart') this.excludeRecommendation(nextSong.id);
         console.warn('Skipping unavailable track:', nextSong.id);
       }
     } finally {
@@ -238,8 +249,8 @@ class SongQueueService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.loading = false;
-    if (this.currentSong?.song.source === 'fm') this.excludeRecommendation(this.currentSong.song.id);
-    if (this.loadingSong?.source === 'fm') this.excludeRecommendation(this.loadingSong.id);
+    if (this.currentSong?.song.source === 'heart') this.excludeRecommendation(this.currentSong.song.id);
+    if (this.loadingSong?.source === 'heart') this.excludeRecommendation(this.loadingSong.id);
     this.loadingSong = null;
     this.finishCurrentSong();
     void this.startNextSongIfIdle();

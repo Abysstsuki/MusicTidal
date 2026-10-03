@@ -7,6 +7,9 @@ const modules = {
   user_account: require('./module/user_account'),
   recommend_songs: require('./module/recommend_songs'),
   personal_fm: require('./module/personal_fm'),
+  user_playlist: require('./module/user_playlist'),
+  likelist: require('./module/likelist'),
+  playmode_intelligence_list: require('./module/playmode_intelligence_list'),
   register_anonimous: require('./module/register_anonimous'),
 }
 

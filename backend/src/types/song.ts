@@ -7,13 +7,13 @@ export interface Song {
 }
 export interface SongWithInstance extends Song {
   instanceId: number;
-  source?: 'manual' | 'fm';
+  source?: 'manual' | 'heart';
 }
 
 export interface RecommendationState {
   enabled: boolean;
   loading: boolean;
-  phase: 'fm' | null;
+  phase: 'heart' | null;
   queued: number;
   error: string | null;
 }

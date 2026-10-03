@@ -2,7 +2,7 @@
 
 Source: the project's `NeteaseCloudMusicApi-master`, version 4.11.1, by Binaryify (MIT; see `LICENSE`). No dependency on that sibling directory remains at runtime.
 
-This subset includes `cloudsearch`, `song_url_v1`, `lyric`, `user_account`, `recommend_songs`, and `personal_fm`. `register_anonimous` is included only to acquire an in-memory guest token when no credentials are configured. Modules are statically imported by `index.js`; the original HTTP server and dynamic directory loading are omitted.
+This subset includes `cloudsearch`, `song_url_v1`, `lyric`, `user_account`, `recommend_songs`, `personal_fm`, `user_playlist`, `likelist`, and `playmode_intelligence_list`. The last three modules support the room's heart mode, using the account's liked playlist and liked song IDs. They are copied unchanged from the same 4.11.1 source. `register_anonimous` is included only to acquire an in-memory guest token when no credentials are configured. Modules are statically imported by `index.js`; the original HTTP server and dynamic directory loading are omitted.
 
 Local adaptations:
 
