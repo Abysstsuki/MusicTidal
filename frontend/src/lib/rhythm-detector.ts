@@ -11,8 +11,6 @@ type PendingPeak = { start: number; energy: number; rawEnergy: number; rawRms: n
 // is confirmed, since live playback cannot backfill the earlier peak time.
 export function createRhythmDetector(sampleRate: number, onBeat?: (timestamp: number) => void) {
   const config = rhythmConfig;
-  const debug = typeof window !== 'undefined' && process.env.NODE_ENV !== 'production'
-    && new URLSearchParams(window.location.search).has('lyricsDebug');
   Meyda.bufferSize = RHYTHM_BUFFER_SIZE;
   Meyda.sampleRate = sampleRate;
   Meyda.windowingFunction = 'hanning';
@@ -34,13 +32,11 @@ export function createRhythmDetector(sampleRate: number, onBeat?: (timestamp: nu
   let noise = 0, ready = true, quietFrames = 0, pending: PendingPeak | null = null;
   let energy = 0, bassWeight = 0;
   let lastPeak = -Infinity, lastBeat = -Infinity, lastFrame = -Infinity;
-  let debugDeltaPeak = 0, debugRmsPeak = 0;
   const reset = () => {
     samples.length = history.length = 0;
     smoothingSum = sampleCount = firstSample = noise = quietFrames = energy = bassWeight = 0;
     ready = true; pending = null;
     lastPeak = lastBeat = lastFrame = -Infinity;
-    debugDeltaPeak = debugRmsPeak = 0;
   };
   const ingest = (signal: Float32Array, timestamp: number) => {
     if (timestamp <= lastFrame) return;
@@ -77,16 +73,6 @@ export function createRhythmDetector(sampleRate: number, onBeat?: (timestamp: nu
     const delta = Math.max(0, smoothed - reference);
     const ratio = delta / Math.max(reference, config.noiseRms, 1e-5);
     const limit = Math.max(config.attackDelta, noise * config.attackNoiseMultiplier);
-    if (debug) {
-      debugDeltaPeak = Math.max(debugDeltaPeak, delta);
-      debugRmsPeak = Math.max(debugRmsPeak, sample.rms);
-      if (index % Math.ceil(1 / step) === 0) {
-        console.debug('[rhythm-detection]', JSON.stringify({ frame: index, sampleRate,
-          rmsPeak: +debugRmsPeak.toFixed(5), deltaPeak: +debugDeltaPeak.toFixed(5),
-          threshold: +limit.toFixed(5), ratio: +ratio.toFixed(3), ready, pending: !!pending }));
-        debugDeltaPeak = debugRmsPeak = 0;
-      }
-    }
     if (!ready) {
       quietFrames = delta <= limit * config.attackResetRatio ? quietFrames + 1 : 0;
       if (quietFrames >= resetFrames) { ready = true; quietFrames = 0; }

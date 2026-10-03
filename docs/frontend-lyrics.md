@@ -1,7 +1,7 @@
 # 歌词曲面与节奏动效
 
 - 歌词字体参照 Mineradio 的默认 `sans` 配置：英文使用已有的 Inter 可变字体，中文使用 Noto Sans SC 可变字体，随后回退到 PingFang SC、Microsoft YaHei、Arial、sans-serif。原文与翻译共用字体栈；原文字重 750、翻译字重 650，字距为 0、行高为 1。
-- 字号通过 `globals.css` 的 `--lyric-font-size` 统一控制各个屏幕断点；相邻原文为当前句的 90%，当前句翻译为 70.2%（默认翻译系数 0.65 × 当前句修正 1.08）。这是源码的排版字号比例；Mineradio 另有运行时聚焦、视口适配与透视缩放，本项目保留自己的曲面和节奏动画。参考版本 [`d43de565`](https://github.com/XxHuberrr/Mineradio-paused/tree/d43de565acabfdc1a9c9820a27e81a98ccbebcef) 中的 `04-fx-defaults.js`、`05-lyrics-fonts-texture.js`、`14-stage-lyrics-rendering.js`。`?preview=1` 同时显示原文与翻译样例，便于查看字体和比例。
+- 字号通过 `globals.css` 的 `--lyric-font-size` 统一控制各个屏幕断点；相邻原文为当前句的 90%，当前句翻译为 70.2%（默认翻译系数 0.65 × 当前句修正 1.08）。这是源码的排版字号比例；Mineradio 另有运行时聚焦、视口适配与透视缩放，本项目保留自己的曲面和节奏动画。参考版本 [`d43de565`](https://github.com/XxHuberrr/Mineradio-paused/tree/d43de565acabfdc1a9c9820a27e81a98ccbebcef) 中的 `04-fx-defaults.js`、`05-lyrics-fonts-texture.js`、`14-stage-lyrics-rendering.js`。
 - `components/curvedlyrics.tsx` 保留 DOM 歌词作为布局、字体和无障碍内容；Three.js 模块只在有歌词时按需加载。
 - `lib/lyric-scene.ts` 将实际字体与换行布局绘制成两张 CanvasTexture，贴到柱面网格。当前句放在独立缩放节点上，其他歌词和翻译另绘一层；大跳动时逐渐淡出相邻文字。镜头围绕当前句做固定半径的环绕，通过镜头偏移保留原来的屏幕位置，鼠标视角和节奏缩放分开更新。
 - `lib/rhythm-config.json` 保存正式调试第一版的完整 Demo 配置，是检测参数与缩放参数的统一入口。本版使用 `rmsRise`：只由 30–250 Hz 的低频 RMS 增量起音；中高频权重为 0。`attackDelta = 0.16451`、`attackRatio = 0.5` 来自用户实际调试配置，不在播放时重新自动估算。
@@ -17,6 +17,6 @@
 
 暂停后动画平缓停止；隐藏标签页停止渲染。纹理只在歌词、字体或尺寸变化时重绘；动画直接更新网格和镜头，不逐帧更新 React 状态。帧率上限 45 fps，舞台大小的帧缓冲像素密度上限 1.75，文字纹理密度上限 2，二者边长均限制为 2048。触摸设备保留曲面和节奏，关闭鼠标视角跟随。
 
-WebGL 不可用、上下文丢失、减少动态效果或强制颜色模式下显示原生 DOM 歌词。`?preview=1` 没有真实音频，播放按钮驱动专用于视觉预览的演示节奏；真实房间只读取播放音频。
+WebGL 不可用、上下文丢失、减少动态效果或强制颜色模式下显示原生 DOM 歌词。房间只读取真实播放音频；预览歌词与演示节奏已移除。
 
-开发模式添加 `?lyricsDebug=1`，控制台会输出 `[lyrics-motion]` 的实际脉冲、缩放、目标缩放和镜头角度，以及 `[rhythm-detection]` 的采样率、每秒最大 RMS/增量、当前门限和候选状态，用于区分未采样、增量不足与触发后渲染问题；生产模式不输出。
+歌词与节奏检测的 URL 调试开关及控制台调试输出已移除，页面不开放 GET 参数调试模式。

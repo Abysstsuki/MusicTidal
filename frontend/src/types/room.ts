@@ -9,6 +9,7 @@ export interface RoomSummary {
   id: string; name: string; host: { id: number; username: string }; locked: boolean; onlineCount: number;
   currentSong: { id: number; name: string; artist: string; prcUrl: string } | null;
   hostDisconnectedUntil: number | null;
+  hostGracePeriodMs?: number;
 }
 export interface RoomInfo extends RoomSummary { binding: NeteaseBinding }
 export interface RoomState {

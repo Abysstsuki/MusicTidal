@@ -22,7 +22,7 @@ export function formatDuration(ms: number) {
 }
 
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
-  const { audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, isPreview, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const { audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
   const [nonCorsUrl, setNonCorsUrl] = useState<string | null>(null);
   const corsEnabled = nonCorsUrl !== audioUrl;
   useAudioRhythm(audioRef, rhythmReader);
@@ -80,7 +80,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || isPreview) return;
+    if (!audio) return;
     setNotice('');
     if (!audioUrl || songId === undefined) {
       playRequest.current += 1;
@@ -104,10 +104,9 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     }
     if (!pausedByUser.current) void tryPlay();
     return () => audio.removeEventListener('loadedmetadata', alignPlayback);
-  }, [audioRef, audioUrl, startTime, playbackRevision, songId, isPreview, corsEnabled, alignPlayback, tryPlay, setIsPlaying]);
+  }, [audioRef, audioUrl, startTime, playbackRevision, songId, corsEnabled, alignPlayback, tryPlay, setIsPlaying]);
 
   useEffect(() => {
-    if (isPreview) return;
     const onInteraction = (event: MouseEvent) => {
       if (!event.isTrusted || !autoplayBlocked.current || pausedByUser.current) return;
       // Playback buttons handle their own click; starting here would toggle them twice.
@@ -116,7 +115,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     };
     document.addEventListener('click', onInteraction, true);
     return () => document.removeEventListener('click', onInteraction, true);
-  }, [isPreview, tryPlay]);
+  }, [tryPlay]);
 
   useEffect(() => () => { playRequest.current += 1; }, []);
   useEffect(() => {
@@ -135,19 +134,6 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     const timer = setTimeout(() => setNotice(''), 4500);
     return () => clearTimeout(timer);
   }, [notice]);
-  useEffect(() => {
-    if (!isPreview || !isPlaying || !currentSong) return;
-    const basePosition = currentPosition;
-    const baseTime = Date.now();
-    const timer = setInterval(() => {
-      const next = Math.min(basePosition + Date.now() - baseTime, currentSong.duration);
-      setCurrentPosition(next);
-      if (next >= currentSong.duration) setIsPlaying(false);
-    }, 250);
-    return () => clearInterval(timer);
-    // The base position is captured when preview playback starts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreview, isPlaying, currentSong, setCurrentPosition, setIsPlaying]);
 
   const perform = async (action: () => Promise<void>) => {
     if (busy) return;
@@ -156,7 +142,6 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     finally { setBusy(false); }
   };
   const togglePlayback = () => {
-    if (isPreview) { setIsPlaying(!isPlaying); return; }
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     if (audio.paused) {
@@ -205,13 +190,13 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
           <SongCover src={currentSong?.prcUrl} />
           <div><strong>{currentSong?.name || '还没有歌曲'}</strong>{currentSong?.artist && <span>{currentSong.artist}</span>}</div>
         </div>
-        <button className="sync-button" data-playback-control disabled={busy || isPreview} onClick={() => void perform(resyncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
-          <SyncRounded fontSize="small" /><span>{isPreview ? '预览' : connection === 'connected' ? '同步中' : '同步'}</span><i />
+        <button className="sync-button" data-playback-control disabled={busy} onClick={() => void perform(resyncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
+          <SyncRounded fontSize="small" /><span>{connection === 'connected' ? '同步中' : '同步'}</span><i />
         </button>
         <div className="transport-controls">
           <button className="icon-button download-button" disabled={!audioUrl || busy} onClick={() => void perform(download)} title="下载歌曲" aria-label="下载歌曲"><DownloadRounded /></button>
-          <button className="play-button" data-playback-control onClick={togglePlayback} disabled={!currentSong || (!isPreview && !audioUrl)} title={isPlaying ? '仅暂停我的播放' : '加入同步播放'} aria-label={isPlaying ? '暂停播放' : '开始播放'}>{isPlaying ? <PauseRounded /> : <PlayArrowRounded />}</button>
-          <button className="icon-button" onClick={() => void perform(skipNext)} disabled={busy || (!currentSong && !isPreview)} title="为大家切换下一首" aria-label="下一首"><SkipNextRounded /></button>
+          <button className="play-button" data-playback-control onClick={togglePlayback} disabled={!currentSong || !audioUrl} title={isPlaying ? '仅暂停我的播放' : '加入同步播放'} aria-label={isPlaying ? '暂停播放' : '开始播放'}>{isPlaying ? <PauseRounded /> : <PlayArrowRounded />}</button>
+          <button className="icon-button" onClick={() => void perform(skipNext)} disabled={busy || !currentSong} title="为大家切换下一首" aria-label="下一首"><SkipNextRounded /></button>
         </div>
         <button className={'icon-button lyrics-toggle ' + (showLyrics ? 'is-active' : '')} onClick={onToggleLyrics} aria-label={showLyrics ? '隐藏歌词' : '显示歌词'} aria-pressed={showLyrics} title="切换歌词"><LyricsOutlined /></button>
         <div className="volume-control">

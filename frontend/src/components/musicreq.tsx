@@ -7,7 +7,6 @@ import CheckRounded from '@mui/icons-material/CheckRounded';
 import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
-import { previewQueue, previewSong } from '@/lib/stage-preview';
 import type { Song, SongSearchResponse } from '@/types/music';
 import SongCover from './modelItem/SongCover';
 import { formatDuration } from './musicplayer';
@@ -15,7 +14,7 @@ import { formatDuration } from './musicplayer';
 const PAGE_SIZE = 10;
 
 export default function MusicReq({ isVisible }: { isVisible: boolean }) {
-  const { enqueue, isPreview, requestRoom } = useMusicContext();
+  const { enqueue, requestRoom } = useMusicContext();
   const [query, setQuery] = useState('');
   const [keyword, setKeyword] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
@@ -37,15 +36,9 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     requestRef.current = controller;
     setLoading(true); setError(''); setNotice(''); setKeyword(term); setPage(nextPage);
     try {
-      if (isPreview) {
-        const candidates = [previewSong, ...previewQueue];
-        setSongs(candidates.filter(song => (song.name + song.artist).toLowerCase().includes(term.toLowerCase())));
-        setPages(1);
-      } else {
-        const data = await requestRoom<SongSearchResponse>('/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
-        if (!data.success) throw new Error('歌曲暂时无法搜索，请稍后重试');
-        if (!controller.signal.aborted) { setSongs(data.data); setPages(Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))); }
-      }
+      const data = await requestRoom<SongSearchResponse>('/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
+      if (!data.success) throw new Error('歌曲暂时无法搜索，请稍后重试');
+      if (!controller.signal.aborted) { setSongs(data.data); setPages(Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))); }
     } catch (err) {
       if (!controller.signal.aborted) { setError((err as Error).message); setSongs([]); }
     } finally { if (!controller.signal.aborted) setLoading(false); }
@@ -58,7 +51,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   };
   const submit = (event: FormEvent) => { event.preventDefault(); void search(query.trim()); };
   return <div className="search-content">
-    <p className="panel-description">{isPreview ? '视觉预览：可搜索 Die For You、夜曲或海阔天空' : '搜索歌名或歌手，放进大家的播放队列。'}</p>
+    <p className="panel-description">搜索歌名或歌手，放进大家的播放队列。</p>
     <form className="song-search" onSubmit={submit}>
       <SearchRounded fontSize="small" />
       <input ref={inputRef} aria-label="搜索歌曲或歌手" placeholder="搜索歌曲或歌手…" value={query} onChange={event => setQuery(event.target.value)} maxLength={100} />

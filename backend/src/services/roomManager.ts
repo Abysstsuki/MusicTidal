@@ -42,7 +42,8 @@ export class Room {
     return { id: this.id, name: this.name, host: this.host, locked: Boolean(this.passwordHash),
       onlineCount: this.onlineMembers().length,
       currentSong: song ? { id: song.id, name: song.name, artist: song.artist, prcUrl: song.prcUrl } : null,
-      hostDisconnectedUntil: this.members.get(this.host.id)?.expiresAt || null };
+      hostDisconnectedUntil: this.members.get(this.host.id)?.expiresAt || null,
+      hostGracePeriodMs: RECONNECT_GRACE_MS };
   }
   onlineMembers() { return [...this.members.values()].filter(member => member.connections.size > 0).map(member => ({ id: member.id, username: member.username, isHost: member.id === this.host.id })); }
   state() {
@@ -80,7 +81,7 @@ export class RoomManager {
   }
   member(id: string, userId: number) {
     const room = this.get(id);
-    if (!room.members.has(userId)) throw new HttpError(403, '请先加入房间', 'NOT_MEMBER');
+    if (!room.members.has(userId) || this.activeByUser.get(userId) !== id) throw new HttpError(403, '请先加入房间', 'NOT_MEMBER');
     return room;
   }
   host(id: string, userId: number) {
@@ -104,7 +105,11 @@ export class RoomManager {
   async join(id: string, user: RoomUser, password?: unknown) {
     let room = this.get(id);
     this.ensureAvailable(user.id, id);
-    if (room.members.has(user.id)) return room;
+    if (room.members.has(user.id)) {
+      // A departed host keeps only a reconnect reservation, not room access.
+      this.activeByUser.set(user.id, id);
+      return room;
+    }
     if (room.passwordHash && (typeof password !== 'string' || Buffer.byteLength(password) > 72 || !await bcrypt.compare(password, room.passwordHash))) throw new HttpError(403, '房间密码不正确', 'ROOM_PASSWORD');
     room = this.get(id); // The host can leave while password verification runs.
     this.ensureAvailable(user.id, id);
@@ -121,7 +126,7 @@ export class RoomManager {
     member.expiresAt = Date.now() + RECONNECT_GRACE_MS;
     member.timer = setTimeout(() => {
       if (room.closed || room.members.get(member.id) !== member || member.connections.size) return;
-      if (member.id === room.host.id) this.destroy(room.id, '房主离线超过 3 分钟，房间已结束');
+      if (member.id === room.host.id) this.destroy(room.id, '房主离开超过 3 分钟，房间已销毁');
       else this.leave(room.id, member.id);
     }, RECONNECT_GRACE_MS);
     member.timer.unref?.();
@@ -142,13 +147,17 @@ export class RoomManager {
   }
   leave(id: string, userId: number) {
     const room = this.rooms.get(id); const member = room?.members.get(userId);
-    if (!room || !member) return;
-    if (userId === room.host.id) { this.destroy(id, '房主结束了房间'); return; }
+    if (!room || !member || this.activeByUser.get(userId) !== id) return;
     if (member.timer) clearTimeout(member.timer);
-    room.members.delete(userId);
-    if (this.activeByUser.get(userId) === id) this.activeByUser.delete(userId);
-    for (const connection of member.connections) {
-      connection.send({ type: 'ROOM_CLOSED', roomId: id, revision: ++room.revision, payload: { reason: '你已退出房间' } }); connection.close();
+    this.activeByUser.delete(userId);
+    const connections = [...member.connections];
+    member.connections.clear();
+    if (userId === room.host.id) this.scheduleExpiry(room, member);
+    else room.members.delete(userId);
+    for (const connection of connections) {
+      try { connection.send({ type: 'ROOM_CLOSED', roomId: id, revision: ++room.revision, payload: { reason: '你已离开房间' } }); }
+      catch { /* Cleanup must continue if a departed connection cannot receive. */ }
+      try { connection.close(); } catch { /* Already closed. */ }
     }
     room.changed();
   }
@@ -187,8 +196,11 @@ export class RoomManager {
     room.changed();
   }
   async refreshAuthorization(userId: number) {
-    const id = this.activeByUser.get(userId); const room = id ? this.rooms.get(id) : undefined;
-    if (!room || room.host.id !== userId) return;
+    // A host may bind again after leaving; retained rooms must also revoke old credentials.
+    await Promise.all([...this.rooms.values()].filter(room => room.host.id === userId)
+      .map(room => this.refreshRoomAuthorization(room, userId)));
+  }
+  private async refreshRoomAuthorization(room: Room, userId: number) {
     const version = ++room.credentialVersion;
     // Revoke the previous context immediately, before an asynchronous credential read.
     room.client = this.clientFactory('');

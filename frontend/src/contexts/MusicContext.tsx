@@ -6,7 +6,6 @@ import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Son
 import type { RoomInfo, RoomState } from '@/types/room';
 import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
 import { useAuth } from './AuthContext';
-import { previewHeartSongs, previewMessages, previewQueue, previewSong, previewUsers } from '@/lib/stage-preview';
 
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 interface MusicContextType {
@@ -14,7 +13,7 @@ interface MusicContextType {
   currentSong: Song | null; currentPosition: number; isPlaying: boolean; audioUrl: string; startTime: number;
   playbackRevision: number; connection: Connection; queue: QueueSong[]; recommendations: RecommendationState;
   messages: ChatMessage[]; onlineUsers: string[]; user: { id?: number; username: string } | null;
-  isPreview: boolean; room: RoomInfo | null; isHost: boolean; notice: string;
+  room: RoomInfo | null; isHost: boolean; notice: string;
   setCurrentSong: (song: Song | null) => void; setCurrentPosition: (position: number) => void; setIsPlaying: (playing: boolean) => void;
   syncPlayback: () => Promise<void>; skipNext: () => Promise<void>; enqueue: (song: Song) => Promise<void>;
   moveToTop: (instanceId: number) => Promise<void>; removeFromQueue: (instanceId: number) => Promise<void>;
@@ -30,31 +29,30 @@ export function useMusicContext() {
   return context;
 }
 
-export function MusicProvider({ children, initialState, preview = false }: { children: ReactNode; initialState?: RoomState; preview?: boolean }) {
+export function MusicProvider({ children, initialState }: { children: ReactNode; initialState: RoomState }) {
   const auth = useAuth();
   const roomId = initialState?.room.id || '';
-  const user = preview ? { username: 'Abyss' } : auth.user;
+  const user = auth.user;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rhythmReader = useRef<RhythmReader>(quietRhythm);
   const [room, setRoom] = useState<RoomInfo | null>(initialState?.room || null);
-  const [currentSong, setCurrentSong] = useState<Song | null>(preview ? previewSong : initialState?.playback.song || null);
-  const [currentPosition, setCurrentPosition] = useState(preview ? 110000 : 0);
+  const [currentSong, setCurrentSong] = useState<Song | null>(initialState.playback.song || null);
+  const [currentPosition, setCurrentPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState(initialState?.playback.url || '');
   const [startTime, setStartTime] = useState(initialState?.playback.startTime || 0);
   const [playbackRevision, setPlaybackRevision] = useState(0);
-  const [connection, setConnection] = useState<Connection>(preview ? 'offline' : 'connecting');
-  const [queue, setQueue] = useState<QueueSong[]>(preview ? previewQueue : initialState?.queue || []);
+  const [connection, setConnection] = useState<Connection>('connecting');
+  const [queue, setQueue] = useState<QueueSong[]>(initialState.queue || []);
   const [recommendations, setRecommendations] = useState<RecommendationState>(initialState?.recommendations || idleRecommendations);
-  const [messages, setMessages] = useState<ChatMessage[]>(preview ? previewMessages : initialState?.messages || []);
-  const [onlineUsers, setOnlineUsers] = useState<string[]>(preview ? previewUsers : initialState?.members.map(member => member.username) || []);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialState.messages || []);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>(initialState.members.map(member => member.username) || []);
   const [notice, setNotice] = useState('');
   const socketRef = useRef<WebSocket | null>(null);
   const revision = useRef(initialState?.revision || 0);
   const serverPlaybackRevision = useRef(initialState?.playback.playbackRevision || 0);
   const lifetime = useRef(new AbortController());
   const closed = useRef(false);
-  const previewInstanceId = useRef(previewQueue.length);
 
   const exit = useCallback((reason: string) => {
     if (closed.current) return;
@@ -86,8 +84,8 @@ export function MusicProvider({ children, initialState, preview = false }: { chi
     setMessages(state.messages); setOnlineUsers(state.members.map(member => member.username));
   }, [roomId, applyPlayback]);
   const syncPlayback = useCallback(async () => {
-    if (!preview) applyState(await requestRoom<RoomState>('/state'));
-  }, [preview, applyState, requestRoom]);
+    applyState(await requestRoom<RoomState>('/state'));
+  }, [applyState, requestRoom]);
   useLayoutEffect(() => {
     lifetime.current = new AbortController(); closed.current = false;
     const audio = audioRef.current;
@@ -97,7 +95,7 @@ export function MusicProvider({ children, initialState, preview = false }: { chi
     };
   }, []);
   useEffect(() => {
-    if (preview || !roomId || !auth.token) return;
+    if (!roomId || !auth.token) return;
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (BACKEND_URL ? BACKEND_URL.replace(/^http/, 'ws') : '');
     if (!wsUrl) { setConnection('offline'); return; }
     let cancelled = false; let retry = 0;
@@ -140,66 +138,35 @@ export function MusicProvider({ children, initialState, preview = false }: { chi
     };
     connect();
     return () => { cancelled = true; clearTimeout(timer); socketRef.current = null; socket?.close(); };
-  }, [auth.token, roomId, preview, exit, applyState, applyPlayback]);
-
-  useEffect(() => {
-    if (!preview || !recommendations.enabled) return;
-    const recommended = queue.filter(song => song.source === 'heart');
-    if (recommended.length <= 2) {
-      const excluded = new Set([currentSong?.id, ...queue.map(song => song.id)]);
-      const additions = previewHeartSongs.filter(song => !excluded.has(song.id)).slice(0, 3 - recommended.length)
-        .map(song => ({ ...song, instanceId: ++previewInstanceId.current, source: 'heart' as const }));
-      if (additions.length) {
-        setQueue([...queue, ...additions]); setRecommendations(state => ({ ...state, phase: 'heart', queued: recommended.length + additions.length })); return;
-      }
-    }
-    if (recommendations.queued !== recommended.length) setRecommendations(state => ({ ...state, queued: recommended.length }));
-  }, [currentSong?.id, preview, queue, recommendations.enabled, recommendations.queued]);
+  }, [auth.token, roomId, exit, applyState, applyPlayback]);
   const mutateQueue = async (action: string, body: object = {}) => {
     await requestRoom('/queue/' + action, { method: 'POST', body: JSON.stringify(body) }); await syncPlayback();
   };
   const enqueue = async (song: Song) => {
-    if (preview) {
-      const added = { ...song, instanceId: ++previewInstanceId.current, source: 'manual' as const };
-      setQueue(items => [...items.filter(item => item.source !== 'heart'), added, ...items.filter(item => item.source === 'heart')]); return;
-    }
     await mutateQueue('add', { song });
   };
   const moveToTop = async (instanceId: number) => {
-    if (preview) { setQueue(items => [...items.filter(item => item.instanceId === instanceId).map(item => ({ ...item, source: 'manual' as const })), ...items.filter(item => item.instanceId !== instanceId)]); return; }
     await mutateQueue('moveTop', { instanceId });
   };
   const removeFromQueue = async (instanceId: number) => {
-    if (preview) { setQueue(items => items.filter(item => item.instanceId !== instanceId)); return; }
     await mutateQueue('remove', { instanceId });
   };
   const skipNext = async () => {
-    if (preview) { setCurrentSong(queue[0] || null); setQueue(items => items.slice(1)); setCurrentPosition(0); setIsPlaying(false); return; }
     await mutateQueue('skipNext', { playbackRevision: serverPlaybackRevision.current });
   };
   const setRecommendationMode = async (enabled: boolean) => {
-    if (preview) {
-      if (enabled) {
-        const excluded = new Set([currentSong?.id, ...queue.map(song => song.id)]);
-        const added = previewHeartSongs.filter(song => !excluded.has(song.id)).slice(0, 3).map(song => ({ ...song, instanceId: ++previewInstanceId.current, source: 'heart' as const }));
-        setQueue(items => [...items, ...added]); setRecommendations({ enabled: true, loading: false, phase: 'heart', queued: added.length, error: null });
-      } else { setQueue(items => items.filter(item => item.source !== 'heart')); setRecommendations(idleRecommendations); }
-      return;
-    }
     await mutateQueue('recommendations/' + (enabled ? 'start' : 'stop'));
   };
   const sendChat = (text: string) => {
     if (!user) throw new Error('请先登录');
-    if (preview) { setMessages(items => [...items, { username: user.username, text }].slice(-25)); return; }
     if (connection !== 'connected' || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('正在重新连接，请稍后发送');
     socketRef.current.send(JSON.stringify({ type: 'chat', roomId, text }));
   };
   const leaveRoom = async () => {
-    if (preview) { exit('已返回大厅'); return; }
-    await requestRoom('/leave', { method: 'POST' }); exit('已退出房间');
+    await requestRoom('/leave', { method: 'POST' }); exit('已离开房间');
   };
   return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision,
-    connection, queue, recommendations, messages, onlineUsers, user, isPreview: preview, room, isHost: preview || room?.host.id === auth.user?.id, notice,
+    connection, queue, recommendations, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id, notice,
     setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue,
     startRecommendations: () => setRecommendationMode(true), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
 }

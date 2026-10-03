@@ -4,7 +4,7 @@ const { once } = require('node:events');
 const { WebSocket } = require('ws');
 const { start } = require('./fixtures/apiHarness.cjs');
 
-test('REST and WebSocket enforce admission, roles, isolation and immediate room destruction', async t => {
+test('REST and WebSocket enforce admission, roles, isolation and host departure countdown', async t => {
   const api = await start(); t.after(() => api.close());
   const request = async (path, id, method = 'GET', body) => {
     const response = await fetch(api.origin + path, { method, headers: { ...(id ? { Authorization: 'Bearer ' + api.token(id) } : {}), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -46,9 +46,12 @@ test('REST and WebSocket enforce admission, roles, isolation and immediate room 
   const state = (await request('/api/rooms/' + a.id + '/state', 3)).body;
   assert.equal(state.playback.song.id, 10); assert.ok(state.playback.url);
   assert.equal((await request('/api/rooms/' + b.id + '/state', 2)).body.playback.song, null);
-  const closed = new Promise(resolve => member.socket.on('message', raw => { const event = JSON.parse(raw.toString()); if (event.type === 'ROOM_CLOSED') resolve(event); }));
-  assert.equal((await request('/api/rooms/' + a.id + '/leave', 1, 'POST')).status, 200); await closed;
-  assert.equal((await request('/api/rooms/' + a.id + '/state', 3)).status, 404);
+  const countdown = new Promise(resolve => member.socket.on('message', raw => { const event = JSON.parse(raw.toString()); if (event.type === 'ROOM_UPDATED' && event.payload.hostDisconnectedUntil) resolve(event); }));
+  assert.equal((await request('/api/rooms/' + a.id + '/leave', 1, 'POST')).status, 200);
+  const departure = await countdown;
+  assert.equal(departure.payload.hostGracePeriodMs, 180000);
+  assert.equal((await request('/api/rooms/' + a.id + '/state', 1)).status, 403);
+  assert.equal((await request('/api/rooms/' + a.id + '/state', 3)).status, 200);
   assert.equal((await request('/api/rooms/' + b.id + '/state', 2)).status, 200);
   const registered = await request('/api/auth/register', undefined, 'POST', { username: 'New', email: 'new@musictidal.test', password: 'DemoMusic123' });
   assert.deepEqual(Object.keys(registered.body).sort(), ['email', 'id', 'username']);

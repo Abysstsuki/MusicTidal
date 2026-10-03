@@ -14,7 +14,7 @@ The main product loop is: browse the lobby, log in, create or join a room, searc
 ## Repository Map
 
 - `frontend/src/app/page.tsx`: public room lobby and login/create/join flow.
-- `frontend/src/app/room/page.tsx`: static listening route using `roomId` query parameters; local demo uses `preview=1`.
+- `frontend/src/app/room/page.tsx`: static listening route using `roomId` query parameters; authentication and room admission are required, with no preview/debug URL modes.
 - `frontend/src/components/ListeningStage.tsx`: room listening layout and host toolbar.
 - `frontend/src/app/layout.tsx`: root layout, font, scanline overlay.
 - `frontend/src/app/globals.css`: Tailwind import and global visual tokens.
@@ -141,7 +141,7 @@ Backend broadcasts:
 - `PLAY_SONG`: `{ song, url, startTime, playbackRevision }` used by clients to align `audio.currentTime`.
 - `RECOMMENDATIONS_UPDATED`: room heart-mode state.
 
-Events use `{ type, roomId, revision, payload }`; clients reject old revisions and other rooms. Same-playback-version skip requests advance once. Host exit destroys immediately; last-connection loss gives 180 seconds to reconnect.
+Events use `{ type, roomId, revision, payload }`; clients reject old revisions and other rooms. Same-playback-version skip requests advance once. Host leave/logout or last-connection loss starts a 180-second destruction countdown; reconnect cancels it. Explicit leave releases active membership and closes every tab, retaining only the host's rejoin reservation. Metadata includes `hostDisconnectedUntil` and `hostGracePeriodMs` for the countdown and confirmation copy.
 
 ## Prisma And Database
 

@@ -7,7 +7,7 @@ import { useMusicContext } from '@/contexts/MusicContext';
 import AuthModal from './authmodal';
 
 export default function ChatBox() {
-  const { messages, user, connection, isPreview, sendChat, login } = useMusicContext();
+  const { messages, user, connection, sendChat, login } = useMusicContext();
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [showAuth, setShowAuth] = useState(false);
@@ -32,8 +32,8 @@ export default function ChatBox() {
       </div>
       {error && <p className="inline-error" role="status">{error}</p>}
       {user ? <form className="chat-composer" onSubmit={submit}>
-        <input aria-label="聊天消息" placeholder={connection === 'connected' || isPreview ? '说点什么…' : '正在重新连接…'} value={input} onChange={event => setInput(event.target.value)} maxLength={500} autoComplete="off" />
-        <button className="icon-button" type="submit" title="发送消息" aria-label="发送消息" disabled={!input.trim() || (!isPreview && connection !== 'connected')}><SendRounded /></button>
+        <input aria-label="聊天消息" placeholder={connection === 'connected' ? '说点什么…' : '正在重新连接…'} value={input} onChange={event => setInput(event.target.value)} maxLength={500} autoComplete="off" />
+        <button className="icon-button" type="submit" title="发送消息" aria-label="发送消息" disabled={!input.trim() || connection !== 'connected'}><SendRounded /></button>
       </form> : <button className="login-chat-button" onClick={() => setShowAuth(true)}>登录后聊天</button>}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLoginSuccess={login} />}
     </div>

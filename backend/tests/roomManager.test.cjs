@@ -59,7 +59,8 @@ test('new rooms without a first connection expire and release the owner', async 
   const m = manager(t); await m.create(user(1), 'A');
   t.mock.timers.tick(RECONNECT_GRACE_MS); assert.equal(m.list().length, 0); assert.equal(m.active(1), null);
 });
-test('leaving removes all member tabs while owner leave closes only that room', async t => {
+test('leaving removes all user tabs while owner departure schedules only that room for destruction', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const m = manager(t); const a = await m.create(user(1), 'A'); const b = await m.create(user(2), 'B');
   await m.join(a.id, user(3));
   const host = socket(), first = socket(), second = socket(), other = socket();
@@ -67,6 +68,11 @@ test('leaving removes all member tabs while owner leave closes only that room', 
   m.leave(a.id, 3); assert.ok(first.closed && second.closed); assert.equal(m.active(3), null); assert.equal(a.summary().onlineCount, 1);
   m.leave(a.id, 1); m.leave(a.id, 1);
   assert.ok(host.closed); assert.ok(host.events.some(event => event.type === 'ROOM_CLOSED'));
+  assert.equal(m.get(a.id), a); assert.equal(m.active(1), null);
+  assert.throws(() => m.member(a.id, 1), error => error.code === 'NOT_MEMBER');
+  assert.equal(a.summary().hostDisconnectedUntil, Date.now() + RECONNECT_GRACE_MS);
+  t.mock.timers.tick(RECONNECT_GRACE_MS);
+  assert.throws(() => m.get(a.id), error => error.code === 'ROOM_CLOSED');
   assert.equal(m.get(b.id), b); assert.equal(other.closed, false);
 });
 test('member expiry releases membership without destroying the room', async t => {

@@ -30,7 +30,7 @@ export function parseLyric(lyric: string): LyricLine[] {
 }
 
 export default function MusicLyrics() {
-  const { currentSong, currentPosition, isPreview, requestRoom } = useMusicContext();
+  const { currentSong, currentPosition, requestRoom } = useMusicContext();
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [translations, setTranslations] = useState<LyricLine[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ export default function MusicLyrics() {
   const songId = currentSong?.id;
   useEffect(() => {
     setLyrics([]); setTranslations([]); setFailed(false);
-    if (!songId || isPreview) return;
+    if (!songId) return;
     const controller = new AbortController();
     setLoading(true);
     requestRoom<{ success: boolean; data?: { lyric: string; tlyric?: string } }>('/netease/lyric?id=' + songId, { signal: controller.signal })
@@ -50,7 +50,7 @@ export default function MusicLyrics() {
       }).catch(() => { if (!controller.signal.aborted) setFailed(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [songId, isPreview, requestRoom]);
+  }, [songId, requestRoom]);
 
   const position = currentPosition / 1000;
   const foundIndex = lyrics.findIndex((line, index) => position >= line.time && (!lyrics[index + 1] || position < lyrics[index + 1].time));
@@ -58,13 +58,13 @@ export default function MusicLyrics() {
   const active = lyrics[index];
   const translation = active ? translations.find(line => Math.abs(line.time - active.time) < 0.15)?.text : '';
   if (!currentSong) return null;
-  const before = isPreview ? '上一句歌词' : lyrics[index - 1]?.text || '';
-  const center = isPreview ? '歌词预览' : loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '暂无歌词');
-  const after = isPreview ? '下一句歌词' : lyrics[index + 1]?.text || '';
+  const before = lyrics[index - 1]?.text || '';
+  const center = loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '暂无歌词');
+  const after = lyrics[index + 1]?.text || '';
   return (
     <CurvedLyrics before={before} center={center} after={after}
-      translation={isPreview ? 'Translation preview' : translation !== active?.text ? translation : undefined}
-      lineKey={String(songId) + '-' + index} animated={isPreview || !!active}
+      translation={translation !== active?.text ? translation : undefined}
+      lineKey={String(songId) + '-' + index} animated={!!active}
       fontClass={lyricsFont.variable} />
   );
 }

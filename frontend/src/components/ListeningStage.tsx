@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
@@ -17,6 +17,9 @@ import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
 import { useMusicContext } from '@/contexts/MusicContext';
 import NeteaseBinding from './NeteaseBinding';
+import StageToast from './StageToast';
+import LeaveRoomDialog from './LeaveRoomDialog';
+import RoomClosureNotice from './RoomClosureNotice';
 
 type Panel = 'chat' | 'queue' | 'search' | null;
 
@@ -28,12 +31,24 @@ function StageBackground({ src }: { src?: string }) {
 }
 
 export default function ListeningStage() {
-  const { currentSong, connection, queue, isPreview, room, isHost, leaveRoom, notice, syncPlayback } = useMusicContext();
+  const { currentSong, connection, queue, room, isHost, leaveRoom, notice, syncPlayback } = useMusicContext();
   const [showBinding, setShowBinding] = useState(false);
-  const [actionNotice, setActionNotice] = useState('');
+  const [toast, setToast] = useState<{ id: number; message: string; error?: boolean } | null>(null);
+  const toastSequence = useRef(0);
+  const dismissToast = useCallback(() => setToast(null), []);
+  const [showLeave, setShowLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
-  const leave = async () => { setLeaving(true); try { await leaveRoom(); } catch (error) { setActionNotice((error as Error).message); setLeaving(false); } };
-  const invite = async () => { try { await navigator.clipboard.writeText(window.location.origin + '/room?roomId=' + room?.id); setActionNotice('邀请链接已复制'); } catch { setActionNotice('请复制浏览器中的房间链接'); } };
+  const requestLeave = () => { if (!leaving) { setLeaveError(''); setShowLeave(true); } };
+  const leave = async () => { if (leaving) return; setLeaving(true); setLeaveError(''); try { await leaveRoom(); } catch (error) { setLeaveError((error as Error).message); setLeaving(false); } };
+  const invite = async () => {
+    if (!room) return;
+    try {
+      const link = window.location.origin + '/room?roomId=' + encodeURIComponent(room.id);
+      await navigator.clipboard.writeText('点击加入MusicParty，' + link);
+      setToast({ id: ++toastSequence.current, message: '邀请链接已复制' });
+    } catch { setToast({ id: ++toastSequence.current, message: '复制失败，请手动复制地址栏中的房间链接', error: true }); }
+  };
   const [panel, setPanel] = useState<Panel>('chat');
   const [showLyrics, setShowLyrics] = useState(true);
   const panelRef = useRef<HTMLElement>(null);
@@ -68,14 +83,14 @@ export default function ListeningStage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [panel]);
-  const status = isPreview ? '视觉预览' : { connected: '同步中', connecting: '连接中', reconnecting: '重新连接', offline: '等待连接' }[connection];
+  const status = { connected: '同步中', connecting: '连接中', reconnecting: '重新连接', offline: '等待连接' }[connection];
 
   return (
     <main className="music-stage">
       <StageBackground key={currentSong?.prcUrl || 'empty'} src={currentSong?.prcUrl} />
       <div className="stage-shade" aria-hidden="true" />
       <header className="stage-header">
-        <Link className="wordmark" href="/" aria-label="退出房间并返回大厅" onClick={event => { event.preventDefault(); void leave(); }}>Music<span>Tidal</span></Link>
+        <Link className="wordmark" href="/" aria-label="离开房间并返回大厅" onClick={event => { event.preventDefault(); requestLeave(); }}>Music<span>Tidal</span></Link>
         <div className={'connection-status ' + (connection === 'connected' ? 'is-connected' : '')} role="status">
           <GraphicEqRounded fontSize="small" /><span>{status}</span><i />
         </div>
@@ -84,23 +99,23 @@ export default function ListeningStage() {
           <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
             <MusicNoteRounded fontSize="small" /><span>点歌</span>
           </button>
-          <UserInfo isPreview={isPreview} />
+          <UserInfo />
         </div>
       </header>
       <div className="room-toolbar">
-        <div><strong>{room?.name || '视觉预览'}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
+        <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
         <span className="room-auth-state">{room?.binding.status === 'bound' ? '网易云 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '网易云授权已过期' : '游客播放授权'}</span>
-        {!isPreview && <button className="pill-button" onClick={() => void invite()}>邀请</button>}
-        {!isPreview && isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
-        <button className="pill-button" disabled={leaving} onClick={() => void leave()}>{leaving ? '正在退出…' : isHost && !isPreview ? '结束房间' : '退出房间'}</button>
+        <button className="pill-button" onClick={() => void invite()}>邀请</button>
+        {isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
+        <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
       </div>
-      {(notice || actionNotice || room?.hostDisconnectedUntil) && <div className="room-banner" role="status">{room?.hostDisconnectedUntil ? '房主暂时离线，将保留至 ' + new Date(room.hostDisconnectedUntil).toLocaleTimeString('zh-CN') + '，重连后继续' : notice || actionNotice}</div>}
+      {room?.hostDisconnectedUntil && <RoomClosureNotice deadline={room.hostDisconnectedUntil} />}
+      {notice && <div className="room-banner" role="status">{notice}</div>}
 
       <section className="track-heading" aria-label="当前歌曲">
         <p className="eyebrow">NOW PLAYING</p>
         <h1>{currentSong?.name || '等待第一首歌'}</h1>
         {currentSong?.artist && <p className="track-artist">{currentSong.artist}</p>}
-        {isPreview && <p className="track-note">演示歌曲 · 仅供视觉预览</p>}
       </section>
 
       {showLyrics && <MusicLyrics />}
@@ -127,7 +142,8 @@ export default function ListeningStage() {
       )}
 
       <MusicPlayer showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(value => !value)} />
-      {isPreview && <button className="preview-label" onClick={() => window.location.assign('/')}>视觉预览 · 返回大厅</button>}
+      {toast && <StageToast key={toast.id} message={toast.message} error={toast.error} onDismiss={dismissToast} />}
+      {showLeave && <LeaveRoomDialog name={room?.name || '当前房间'} isHost={isHost} graceMs={room?.hostGracePeriodMs} busy={leaving} error={leaveError} onClose={() => setShowLeave(false)} onConfirm={() => void leave()} />}
       {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} onChanged={syncPlayback} />}
     </main>
   );

@@ -7,16 +7,16 @@ import type { createLyricScene } from '@/lib/lyric-scene';
 type Props = { before: string; center: string; after: string; translation?: string; lineKey: string; animated: boolean; fontClass: string };
 
 export default function CurvedLyrics({ before, center, after, translation, lineKey, animated, fontClass }: Props) {
-  const { isPlaying, isPreview, rhythmReader } = useMusicContext();
+  const { isPlaying, rhythmReader } = useMusicContext();
   const hostRef = useRef<HTMLElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<ReturnType<typeof createLyricScene> | null>(null);
-  const motionRef = useRef({ playing: isPlaying, preview: isPreview });
+  const motionRef = useRef({ playing: isPlaying });
   useEffect(() => {
-    motionRef.current = { playing: isPlaying, preview: isPreview };
+    motionRef.current = { playing: isPlaying };
     sceneRef.current?.wake();
-  }, [isPlaying, isPreview]);
+  }, [isPlaying]);
   useEffect(() => {
     if (!animated) return;
     let disposed = false, generation = 0;

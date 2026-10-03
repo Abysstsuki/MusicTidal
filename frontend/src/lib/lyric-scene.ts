@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { RhythmFrame } from '@/lib/audio-rhythm';
 import rhythmConfig from '@/lib/rhythm-config.json';
 
-type MotionState = { playing: boolean; preview: boolean; rhythm: RhythmFrame };
+type MotionState = { playing: boolean; rhythm: RhythmFrame };
 const PADDING = 64;
 const MAX_LYRIC_SCALE = rhythmConfig.scale;
 
@@ -70,8 +70,6 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
   let width = 1, height = 1, distance = 1, anchorY = 0;
   let targetX = 0, targetY = 0, cameraX = 0, cameraY = 0;
   let strength = 0, scale = 1, rotation = 0, opacity = 0.75;
-  const debugMotion = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).has('lyricsDebug');
-  let debugAt = 0, previousPulse = 0;
   let frame = 0, refreshFrame = 0, disposed = false, contextLost = false, textReady = false, lastTime = 0;
   let activeKey = '';
   const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
@@ -161,9 +159,7 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     lastTime = now;
     const motion = read();
     const t = now / 1000;
-    // Preview has no audio. A demo envelope is confined to the visual-preview route.
-    const demoAge = t % 0.72;
-    const rhythm = motion.preview ? { energy: 0.6, bassWeight: 0.7, pulse: Math.exp(-Math.max(0, demoAge - rhythmConfig.hold) * rhythmConfig.release) } : motion.rhythm;
+    const rhythm = motion.rhythm;
     const blend = 1 - Math.exp(-dt * 9);
     strength += ((motion.playing ? 1 : 0) - strength) * blend;
     const beat = rhythm.pulse * strength;
@@ -185,11 +181,6 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     opacity += (1 - opacity) * blend;
     material.opacity = opacity;
     adjacentMaterial.opacity = opacity * Math.max(0, 1 - (scale - 1) / 1.2);
-    if (debugMotion && (beat > previousPulse + 0.1 || now - debugAt > 1000)) {
-      console.debug('[lyrics-motion]', JSON.stringify({ pulse: +beat.toFixed(3), scale: +scale.toFixed(3), targetScale: +desiredScale.toFixed(3), yaw: +yaw.toFixed(3), pitch: +pitch.toFixed(3) }));
-      debugAt = now;
-    }
-    previousPulse = beat;
     renderer.render(scene, camera);
     host.dataset.webgl = 'ready';
     const moving = motion.playing || strength > 0.001 || Math.abs(scale - 1) > 0.0001 || Math.abs(rotation) > 0.0001 || Math.abs(cameraX - targetX) > 0.001 || Math.abs(cameraY - targetY) > 0.001 || opacity < 0.999;

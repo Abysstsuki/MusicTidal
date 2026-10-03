@@ -13,7 +13,7 @@ import { formatDuration } from './musicplayer';
 import styles from './musicqueue.module.css';
 
 export default function MusicQueue() {
-  const { queue, recommendations, startRecommendations, stopRecommendations, moveToTop, removeFromQueue, isHost, isPreview, room } = useMusicContext();
+  const { queue, recommendations, startRecommendations, stopRecommendations, moveToTop, removeFromQueue, isHost, room } = useMusicContext();
   const [pending, setPending] = useState<number | null>(null);
   const [modePending, setModePending] = useState<'start' | 'stop' | null>(null);
   const modeActionVersion = useRef(0);
@@ -39,15 +39,15 @@ export default function MusicQueue() {
         <FavoriteRounded />
         <strong role="status">{recommendationStatus}</strong>
         <button className={styles.toggle} onClick={() => void toggleRecommendations()}
-          disabled={!isHost || (!isPreview && room?.binding.status !== 'bound' && !recommendations.enabled) || modePending === 'stop' || (!recommendations.enabled && modePending === 'start')}
+          disabled={!isHost || (room?.binding.status !== 'bound' && !recommendations.enabled) || modePending === 'stop' || (!recommendations.enabled && modePending === 'start')}
           aria-label={recommendations.enabled ? '停止续播' : '开启心动模式'}>
           {recommendations.enabled ? <StopRounded /> : <PlayArrowRounded />}
           {recommendations.enabled ? '停止续播' : modePending === 'start' ? '加载中…' : '开启心动模式'}
         </button>
       </div>
       <p>{recommendations.enabled ? '手动点歌优先；停止后，当前歌曲继续播完。' : '根据红心歌单推荐歌曲，手动点歌优先。'}</p>
-      {!isPreview && <p>{room?.binding.status === 'bound' ? '网易云授权 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '房主网易云授权已过期，当前使用游客授权' : '当前使用游客授权'}</p>}
-      <span>{!isHost ? '由房主控制心动模式 · 所有人同步收听' : !isPreview && room?.binding.status !== 'bound' ? '先绑定网易云账号，即可开启心动模式' : '使用房主网易云账号的红心歌单 · 所有人同步收听'}</span>
+      <p>{room?.binding.status === 'bound' ? '网易云授权 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '房主网易云授权已过期，当前使用游客授权' : '当前使用游客授权'}</p>
+      <span>{!isHost ? '由房主控制心动模式 · 所有人同步收听' : room?.binding.status !== 'bound' ? '先绑定网易云账号，即可开启心动模式' : '使用房主网易云账号的红心歌单 · 所有人同步收听'}</span>
     </div>
     {(error || recommendations.error) && <p className="inline-error" role="status">{error || recommendations.error}</p>}
     <div className="song-list">

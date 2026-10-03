@@ -90,8 +90,8 @@ export default function Home() {
   };
   const visible = rooms.filter(room => (room.name + room.host.username).toLowerCase().includes(filter.toLowerCase()));
   return <main className="room-lobby">
-    <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">找一个房间，一起听。</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}<UserInfo /></div></header>
-    <section className="lobby-intro"><div><p className="eyebrow">LISTEN TOGETHER</p><h1>正在一起听</h1><p>进入房间，分享下一首歌。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
+    <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">多人同步听歌</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}<UserInfo /></div></header>
+    <section className="lobby-intro"><div><p className="eyebrow">ROOM LOBBY</p><h1>房间大厅</h1><p>选择房间加入，或创建新的房间。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
     {notice && <p className="lobby-notice" role="status">{notice}</p>}
     {auth.error && <p className="inline-error" role="alert">{auth.error} <button className="pill-button" onClick={auth.retry}>重试登录状态</button></p>}
     {active && !action && <ActiveRoomChoice room={active} onLeft={() => { setActive(null); void refresh(); }} />}
@@ -104,7 +104,7 @@ export default function Home() {
         {room.hostDisconnectedUntil && <p className="room-away">房主暂时离线，等待重连</p>}
         <button className="room-enter" disabled={busy || auth.loading} onClick={() => open({ kind: 'join', room })}>进入房间 <span>↗</span></button>
       </article>)}</div>}
-    </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入 <Link href="/room?preview=1">查看听歌界面预览</Link></footer>
+    </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入</footer>
     {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token) => { authCompleted.current = true; auth.login(username, token); setShowAuth(false); }} />}
     {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} />}
     {action && auth.user && !auth.loading && <StageDialog label={action.kind === 'create' ? '创建房间' : '加入房间'} onClose={() => { if (!busy) { setAction(null); setPassword(''); } }}><div className="auth-header"><h2>{action.kind === 'create' ? '创建房间' : action.room.name}</h2><button className="icon-button" disabled={busy} aria-label="关闭房间操作" onClick={() => { setAction(null); setPassword(''); }}><CloseRounded /></button></div>
