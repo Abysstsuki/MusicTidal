@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
@@ -51,6 +51,8 @@ export default function ListeningStage() {
   };
   const [panel, setPanel] = useState<Panel>('chat');
   const [showLyrics, setShowLyrics] = useState(true);
+  const stageRef = useRef<HTMLElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closePanel = () => {
@@ -61,6 +63,20 @@ export default function ListeningStage() {
     triggerRef.current = trigger;
     setPanel(value => value === next ? null : next);
   };
+  useLayoutEffect(() => {
+    const stage = stageRef.current, controls = controlsRef.current, popover = panelRef.current;
+    if (!panel || !stage || !controls || !popover) return;
+    const updateBounds = () => {
+      const bottom = Number.parseFloat(window.getComputedStyle(popover).bottom) || 0;
+      const available = stage.getBoundingClientRect().bottom - bottom - controls.getBoundingClientRect().bottom - 12;
+      popover.style.setProperty('--stage-panel-max-height', Math.max(0, Math.floor(available)) + 'px');
+    };
+    updateBounds();
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(stage); observer.observe(controls);
+    window.addEventListener('resize', updateBounds);
+    return () => { observer.disconnect(); window.removeEventListener('resize', updateBounds); };
+  }, [panel]);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
     const collapse = () => { if (media.matches) setPanel(null); };
@@ -86,31 +102,33 @@ export default function ListeningStage() {
   const status = { connected: '同步中', connecting: '连接中', reconnecting: '重新连接', offline: '等待连接' }[connection];
 
   return (
-    <main className="music-stage">
+    <main className="music-stage" ref={stageRef}>
       <StageBackground key={currentSong?.prcUrl || 'empty'} src={currentSong?.prcUrl} />
       <div className="stage-shade" aria-hidden="true" />
-      <header className="stage-header">
-        <Link className="wordmark" href="/" aria-label="离开房间并返回大厅" onClick={event => { event.preventDefault(); requestLeave(); }}>Music<span>Tidal</span></Link>
-        <div className={'connection-status ' + (connection === 'connected' ? 'is-connected' : '')} role="status">
-          <GraphicEqRounded fontSize="small" /><span>{status}</span><i />
+      <div className="stage-controls" ref={controlsRef}>
+        <header className="stage-header">
+          <Link className="wordmark" href="/" aria-label="离开房间并返回大厅" onClick={event => { event.preventDefault(); requestLeave(); }}>Music<span>Tidal</span></Link>
+          <div className={'connection-status ' + (connection === 'connected' ? 'is-connected' : '')} role="status">
+            <GraphicEqRounded fontSize="small" /><span>{status}</span><i />
+          </div>
+          <div className="header-actions">
+            <OnlineUser />
+            <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
+              <MusicNoteRounded fontSize="small" /><span>点歌</span>
+            </button>
+            <UserInfo />
+          </div>
+        </header>
+        <div className="room-toolbar">
+          <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
+          <span className="room-auth-state">{room?.binding.status === 'bound' ? '网易云 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '网易云授权已过期' : '游客播放授权'}</span>
+          <button className="pill-button" onClick={() => void invite()}>邀请</button>
+          {isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
+          <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
         </div>
-        <div className="header-actions">
-          <OnlineUser />
-          <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
-            <MusicNoteRounded fontSize="small" /><span>点歌</span>
-          </button>
-          <UserInfo />
-        </div>
-      </header>
-      <div className="room-toolbar">
-        <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
-        <span className="room-auth-state">{room?.binding.status === 'bound' ? '网易云 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '网易云授权已过期' : '游客播放授权'}</span>
-        <button className="pill-button" onClick={() => void invite()}>邀请</button>
-        {isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
-        <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
+        {room?.hostDisconnectedUntil && <RoomClosureNotice deadline={room.hostDisconnectedUntil} />}
+        {notice && <div className="room-banner" role="status">{notice}</div>}
       </div>
-      {room?.hostDisconnectedUntil && <RoomClosureNotice deadline={room.hostDisconnectedUntil} />}
-      {notice && <div className="room-banner" role="status">{notice}</div>}
 
       <section className="track-heading" aria-label="当前歌曲">
         <p className="eyebrow">NOW PLAYING</p>

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
+import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import { apiRequest, ApiError } from '@/lib/api';
 import type { NeteaseBinding as Binding } from '@/types/room';
 import StageDialog from './StageDialog';
@@ -76,14 +78,42 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
     } catch (problem) { if (mounted.current) setError((problem as Error).message); }
     finally { if (mounted.current) setBusy(false); }
   };
-  return <StageDialog label="绑定网易云账号" onClose={onClose}>
-    <div className="auth-header"><h2>网易云账号</h2><button className="icon-button" aria-label="关闭绑定" onClick={onClose}><CloseRounded /></button></div>
-    <p className="panel-description">绑定后，你创建的房间将使用这个账号播放，并支持红心歌单心动续播。</p>
-    <div className="binding-status"><strong>{binding?.profile?.nickname || '尚未绑定'}</strong><span>{binding?.status === 'bound' ? '已绑定' : binding?.status === 'expired' ? '授权已过期，请重新扫码' : '游客授权'}</span></div>
-    {qr && <div className="qr-image"><Image src={qr.image} alt="使用网易云 App 扫码登录" width={256} height={256} unoptimized /></div>}
-    {status && <p role="status" className="panel-description">{status}</p>}
-    {error && <p className="inline-error" role="alert">{error}</p>}
-    <div className="dialog-actions"><button className="primary-button" disabled={busy} onClick={() => void createQr()}>{busy ? '请稍等…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定'}</button>
-      {binding?.status !== 'unbound' && binding && <button className="pill-button" disabled={busy} onClick={() => void unbind()}>解除绑定</button>}</div>
+  const bindingState = binding?.status || 'loading';
+  const bindingTitle = binding?.status === 'bound' ? binding.profile?.nickname || '网易云账号' : binding?.status === 'expired' ? binding.profile?.nickname || '授权已过期' : binding ? '尚未绑定网易云账号' : '正在读取账号状态';
+  const bindingDetail = binding?.status === 'bound' ? '房间将使用此账号播放，可开启心动模式' : binding?.status === 'expired' ? '请重新扫码，恢复账号授权' : binding ? '当前房间使用游客播放授权' : '请稍候';
+  const bindingLabel = binding?.status === 'bound' ? '已绑定' : binding?.status === 'expired' ? '授权过期' : binding ? '游客授权' : '检查中';
+
+  return <StageDialog label="绑定网易云账号" onClose={onClose} className="netease-dialog">
+    <div className="netease-dialog-header">
+      <div className="netease-dialog-title">
+        <span className="netease-dialog-icon"><MusicNoteRounded /></span>
+        <div><span className="netease-kicker">ACCOUNT CONNECTION</span><h2>网易云音乐账号</h2></div>
+      </div>
+      <button className="icon-button" aria-label="关闭绑定" onClick={onClose}><CloseRounded /></button>
+    </div>
+    <p className="netease-description">绑定后，房间将使用此账号播放，并可开启心动模式。</p>
+
+    <div className={'netease-binding-card netease-status-' + bindingState}>
+      <span className="netease-binding-indicator" aria-hidden="true" />
+      <div className="netease-binding-copy"><strong>{bindingTitle}</strong><span>{bindingDetail}</span></div>
+      <span className="netease-binding-label">{bindingLabel}</span>
+    </div>
+
+    {qr && <div className="netease-qr-panel">
+      <div className="qr-image"><Image src={qr.image} alt="使用网易云 App 扫码登录" width={256} height={256} unoptimized /></div>
+      <div className="netease-qr-instructions">
+        <strong>使用网易云音乐 App 扫码</strong>
+        <span>扫码后请在手机上确认，绑定完成后会自动更新。</span>
+        <p role="status">{status || '等待扫码'}</p>
+      </div>
+    </div>}
+
+    {!qr && status && <p role="status" className="netease-feedback">{status}</p>}
+    {error && <p className="inline-error netease-error" role="alert">{error}</p>}
+
+    <div className="dialog-actions netease-actions">
+      <button className="primary-button" disabled={busy} onClick={() => void createQr()}><QrCode2Rounded fontSize="small" />{busy ? '正在准备二维码…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定'}</button>
+      {binding?.status !== 'unbound' && binding && <button className="pill-button" disabled={busy} onClick={() => void unbind()}>解除绑定</button>}
+    </div>
   </StageDialog>;
 }
