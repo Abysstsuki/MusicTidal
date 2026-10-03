@@ -1,5 +1,7 @@
 # MusicTidal Vercel 迁移方案
 
+> 历史方案提示（2026-10-03）：Vercel 当前已提供原生 WebSocket Beta，下面替换为 Pusher 的设计是旧方案，并非当前平台的强制要求。Neon 接入、环境变量配置以及现有 WebSocket 的改造要求见 [Neon / Vercel 接入步骤](./neon-vercel-setup.md)。
+
 ## 1. 当前架构
 
 ```

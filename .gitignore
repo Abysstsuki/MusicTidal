@@ -29,3 +29,6 @@ docs/superpowers/
 .gstack/
 .reasonix
 .codegraph
+
+# Local audio/lyrics tuning workspace
+/demo/
