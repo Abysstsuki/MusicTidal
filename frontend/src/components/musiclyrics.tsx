@@ -64,7 +64,7 @@ export default function MusicLyrics() {
   const after = isPreview ? '下一句歌词' : lyrics[index + 1]?.text || '';
   return (
     <CurvedLyrics before={before} center={center} after={after}
-      translation={translation !== active?.text ? translation : undefined}
+      translation={isPreview ? 'Translation preview' : translation !== active?.text ? translation : undefined}
       lineKey={String(songId) + '-' + index} animated={isPreview || !!active}
       fontClass={lyricsFont.variable} />
   );

@@ -74,17 +74,18 @@ button svg { flex-shrink: 0; }
 .track-heading h1 { margin: 0; font-size: clamp(23px, 2.1vw, 32px); line-height: 1.3; font-weight: 700; letter-spacing: -.7px; overflow-wrap: anywhere; }
 .track-artist { margin: 6px 0 9px; font-size: 21px; color: #d6ced0; }
 .track-note { margin: 0; font-size: 14px; color: var(--text-secondary); }
-.stage-lyrics { position: absolute; z-index: 1; top: 38%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 110px); max-width: 1100px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; font-family: var(--font-lyrics), "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; font-kerning: normal; pointer-events: none; text-shadow: 0 2px 22px rgba(0,0,0,.38); }
+/* Mineradio typography: context .9, current translation .65 × 1.08. */
+.stage-lyrics { --lyric-font-size: clamp(28px, 4.15vw, 62px); --lyric-context-scale: .9; --lyric-translation-scale: .702; position: absolute; z-index: 1; top: 38%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 110px); max-width: 1100px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; font-family: var(--font-inter), var(--font-lyrics), "PingFang SC", "Microsoft YaHei", Arial, sans-serif; font-synthesis: none; font-kerning: normal; pointer-events: none; text-shadow: 0 2px 22px rgba(0,0,0,.38); }
 .stage-lyrics p { text-wrap: balance; }
 .lyric-copy { width: 100%; display: flex; flex-direction: column; align-items: center; gap: inherit; }
 .lyric-surface { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; visibility: hidden; }
 .stage-lyrics[data-webgl="ready"] .lyric-copy { opacity: 0; }
 .stage-lyrics[data-webgl="ready"] .lyric-surface { visibility: visible; }
 .stage-lyrics[data-webgl="ready"] .lyric-current { animation: none; }
-.lyric-adjacent { margin: 0; font-size: clamp(18px, 2.1vw, 32px); line-height: 1.65; font-weight: 400; letter-spacing: .02em; color: rgba(246,233,237,.6); overflow-wrap: anywhere; max-width: 95%; }
-.lyric-current > p:first-child { margin: 0; color: #fff8f6; font-size: clamp(28px, 4.15vw, 62px); line-height: 1.5; letter-spacing: .035em; font-weight: 600; overflow-wrap: anywhere; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
+.lyric-adjacent { margin: 0; font-size: calc(var(--lyric-font-size) * var(--lyric-context-scale)); line-height: 1; font-weight: 750; letter-spacing: 0; color: rgba(246,233,237,.6); overflow-wrap: anywhere; max-width: 95%; }
+.lyric-current > p:first-child { margin: 0; color: #fff8f6; font-size: var(--lyric-font-size); line-height: 1; letter-spacing: 0; font-weight: 750; overflow-wrap: anywhere; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
 .lyric-current { animation: lyric-in .45s ease both; }
-.lyric-current .lyric-translation { font-size: clamp(14px, 1.8vw, 24px); color: #e4c7cc; margin: 12px 0 0; line-height: 1.65; letter-spacing: .01em; font-weight: 400; }
+.lyric-current .lyric-translation { font-size: calc(var(--lyric-font-size) * var(--lyric-translation-scale)); color: #e4c7cc; margin: 12px 0 0; line-height: 1; letter-spacing: 0; font-weight: 650; }
 .lyrics-hidden-label { position: absolute; top: 37%; left: 0; width: 100%; text-align: center; color: rgba(255,255,255,.5); letter-spacing: .3em; }
 .stage-tools { position: absolute; z-index: 10; right: 20px; bottom: 19.5%; display: flex; gap: 10px; }
 .stage-tools .pill-button { border-radius: 14px; padding: 10px 12px; font-size: 12px; gap: 7px; }
@@ -255,10 +256,9 @@ button svg { flex-shrink: 0; }
   .track-heading h1 { font-size: 25px; }
   .track-artist { font-size: 16px; margin: 5px 0 6px; }
   .track-note { font-size: 11px; }
-  .stage-lyrics { top: 43%; width: calc(100% - 42px); gap: 20px; }
-  .lyric-adjacent { font-size: 16px; line-height: 1.6; color: rgba(246,233,237,.65); }
-  .lyric-current > p:first-child { font-size: clamp(26px, 7.5vw, 36px); line-height: 1.55; letter-spacing: .01em; }
-  .lyric-current .lyric-translation { font-size: 14px; margin-top: 8px; }
+  .stage-lyrics { --lyric-font-size: clamp(26px, 7.5vw, 36px); top: 43%; width: calc(100% - 42px); gap: 20px; }
+  .lyric-adjacent { color: rgba(246,233,237,.65); }
+  .lyric-current .lyric-translation { margin-top: 8px; }
   .stage-tools { right: 20px; bottom: 178px; gap: 8px; }
   .stage-tools .pill-button { font-size: 12px; padding: 9px 12px; }
   .stage-tools svg { font-size: 17px; }
@@ -306,9 +306,7 @@ button svg { flex-shrink: 0; }
 }
 @media (max-height: 700px) and (min-width: 641px) {
   .stage-header { padding-block: 18px; }
-  .stage-lyrics { top: 43%; gap: 14px; }
-  .lyric-current > p:first-child { font-size: clamp(28px, 3.6vw, 50px); }
-  .lyric-adjacent { font-size: 22px; }
+  .stage-lyrics { --lyric-font-size: clamp(28px, 3.6vw, 50px); top: 43%; gap: 14px; }
   .stage-tools { bottom: 155px; }
   .stage-popover { bottom: 212px; }
   .chat-history { max-height: 130px; }
@@ -321,9 +319,7 @@ button svg { flex-shrink: 0; }
   .track-heading h1 { font-size: 22px; }
   .track-artist { font-size: 16px; }
   .track-note { font-size: 11px; }
-  .stage-lyrics { top: 42%; left: 64%; width: 58%; gap: 9px; }
-  .lyric-current > p:first-child { font-size: 28px; }
-  .lyric-adjacent { font-size: 15px; }
+  .stage-lyrics { --lyric-font-size: 28px; top: 42%; left: 64%; width: 58%; gap: 9px; }
   .player-dock { bottom: 15px; padding-block: 25px 12px; }
   .play-button { width: 44px; height: 44px; }
   .stage-tools { bottom: 115px; }

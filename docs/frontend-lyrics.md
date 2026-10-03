@@ -1,5 +1,7 @@
 # 歌词曲面与节奏动效
 
+- 歌词字体参照 Mineradio 的默认 `sans` 配置：英文使用已有的 Inter 可变字体，中文使用 Noto Sans SC 可变字体，随后回退到 PingFang SC、Microsoft YaHei、Arial、sans-serif。原文与翻译共用字体栈；原文字重 750、翻译字重 650，字距为 0、行高为 1。
+- 字号通过 `globals.css` 的 `--lyric-font-size` 统一控制各个屏幕断点；相邻原文为当前句的 90%，当前句翻译为 70.2%（默认翻译系数 0.65 × 当前句修正 1.08）。这是源码的排版字号比例；Mineradio 另有运行时聚焦、视口适配与透视缩放，本项目保留自己的曲面和节奏动画。参考版本 [`d43de565`](https://github.com/XxHuberrr/Mineradio-paused/tree/d43de565acabfdc1a9c9820a27e81a98ccbebcef) 中的 `04-fx-defaults.js`、`05-lyrics-fonts-texture.js`、`14-stage-lyrics-rendering.js`。`?preview=1` 同时显示原文与翻译样例，便于查看字体和比例。
 - `components/curvedlyrics.tsx` 保留 DOM 歌词作为布局、字体和无障碍内容；Three.js 模块只在有歌词时按需加载。
 - `lib/lyric-scene.ts` 将实际字体与换行布局绘制成两张 CanvasTexture，贴到柱面网格。当前句放在独立缩放节点上，其他歌词和翻译另绘一层；大跳动时逐渐淡出相邻文字。镜头围绕当前句做固定半径的环绕，通过镜头偏移保留原来的屏幕位置，鼠标视角和节奏缩放分开更新。
 - `lib/rhythm-config.json` 保存正式调试第一版的完整 Demo 配置，是检测参数与缩放参数的统一入口。本版使用 `rmsRise`：只由 30–250 Hz 的低频 RMS 增量起音；中高频权重为 0。`attackDelta = 0.16451`、`attackRatio = 0.5` 来自用户实际调试配置，不在播放时重新自动估算。
