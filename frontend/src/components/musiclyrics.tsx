@@ -57,9 +57,10 @@ export default function MusicLyrics() {
   const index = Math.max(0, foundIndex);
   const active = lyrics[index];
   const translation = active ? translations.find(line => Math.abs(line.time - active.time) < 0.15)?.text : '';
-  const before = isPreview || !currentSong ? '把喧嚣留在世界之外' : lyrics[index - 1]?.text || '';
-  const center = isPreview ? '我们在同一片夜里相遇。' : !currentSong ? '让音乐，连接此刻的我们。' : loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '此刻，用心听。');
-  const after = isPreview ? '让这一刻，慢一点过去' : !currentSong ? '点一首喜欢的歌，和大家一起听' : lyrics[index + 1]?.text || '';
+  if (!currentSong) return null;
+  const before = isPreview ? '上一句歌词' : lyrics[index - 1]?.text || '';
+  const center = isPreview ? '歌词预览' : loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '暂无歌词');
+  const after = isPreview ? '下一句歌词' : lyrics[index + 1]?.text || '';
   return (
     <section className={`${lyricsFont.variable} stage-lyrics`} aria-label="同步歌词">
       <p className="lyric-adjacent lyric-before">{before || '\u00a0'}</p>

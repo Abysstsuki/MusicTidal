@@ -1,26 +1,26 @@
 import { RecommendationState, Song, SongWithInstance } from '../types/song';
 import { broadcast, setCurrentSongInfo } from './websocketServer';
 import { getSongPlayInfo } from './netease/song.service';
-import { getDailyRecommendedSongs, getPersonalFmSongs } from './netease/recommendation.service';
+import { getPersonalFmSongs } from './netease/recommendation.service';
 
 class SongQueueService {
   private queue: SongWithInstance[] = [];
   private currentInstanceId = 0;
-  private currentSong: { song: Song; startTime: number } | null = null;
+  private currentSong: { song: SongWithInstance; startTime: number } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private loading = false;
   private loadingSong: SongWithInstance | null = null;
   private generation = 0;
   private recommendedQueue: SongWithInstance[] = [];
   private recommendationsEnabled = false;
-  private recommendationPhase: 'daily' | 'fm' | null = null;
+  private recommendationPhase: 'fm' | null = null;
   private recommendationLoading = false;
   private recommendationError: string | null = null;
   private recommendationGeneration = 0;
-  private dailyTask: Promise<RecommendationState> | null = null;
   private refillTask: Promise<void> | null = null;
   private refillRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private recentSongIds: number[] = [];
+  private excludedRecommendationIds: number[] = [];
 
   getCurrentSong() { return this.currentSong; }
   getQueue() { return [...this.queue, ...this.recommendedQueue]; }
@@ -41,7 +41,7 @@ class SongQueueService {
   clear() { this.queue = []; this.stopRecommendations(); }
   removeById(instanceId: number) {
     const removedRecommendation = this.recommendedQueue.find(song => song.instanceId === instanceId);
-    if (removedRecommendation) this.rememberSong(removedRecommendation.id);
+    if (removedRecommendation) this.excludeRecommendation(removedRecommendation.id);
     this.queue = this.queue.filter(song => song.instanceId !== instanceId);
     this.recommendedQueue = this.recommendedQueue.filter(song => song.instanceId !== instanceId);
     this.broadcastQueue();
@@ -64,17 +64,16 @@ class SongQueueService {
     }
   }
 
-  startDailyRecommendations(): Promise<RecommendationState> {
-    if (this.dailyTask) return this.dailyTask;
-    if (this.recommendationsEnabled) return Promise.resolve(this.getRecommendationState());
-    const generation = ++this.recommendationGeneration;
-    this.recommendationsEnabled = true;
-    this.recommendationLoading = true;
-    this.recommendationPhase = 'daily';
-    this.recommendationError = null;
-    this.broadcastRecommendationState();
-    this.dailyTask = this.loadDailyRecommendations(generation);
-    return this.dailyTask;
+  async startPersonalFm(): Promise<RecommendationState> {
+    if (!this.recommendationsEnabled) {
+      ++this.recommendationGeneration;
+      this.recommendationsEnabled = true;
+      this.recommendationPhase = 'fm';
+      this.recommendationError = null;
+      this.broadcastRecommendationState();
+    }
+    await this.refillRecommendations();
+    return this.getRecommendationState();
   }
 
   stopRecommendations() {
@@ -84,7 +83,6 @@ class SongQueueService {
     this.recommendationPhase = null;
     this.recommendationError = null;
     this.recommendedQueue = [];
-    this.dailyTask = null;
     this.refillTask = null;
     if (this.refillRetryTimer) clearTimeout(this.refillRetryTimer);
     this.refillRetryTimer = null;
@@ -94,35 +92,10 @@ class SongQueueService {
     return this.getRecommendationState();
   }
 
-  private async loadDailyRecommendations(generation: number): Promise<RecommendationState> {
-    try {
-      const songs = await getDailyRecommendedSongs();
-      if (generation !== this.recommendationGeneration) return this.getRecommendationState();
-      const fresh = this.filterFreshSongs(songs);
-      if (!fresh.length) throw new Error('今天的日推暂时没有新的歌曲，请稍后再试');
-      this.recommendedQueue = fresh.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'daily' }));
-      this.broadcastQueue();
-    } catch (error) {
-      if (generation !== this.recommendationGeneration) return this.getRecommendationState();
-      this.recommendationsEnabled = false;
-      this.recommendationPhase = null;
-      this.recommendationError = (error as Error).message;
-      throw error;
-    } finally {
-      if (generation === this.recommendationGeneration) {
-        this.recommendationLoading = false;
-        this.dailyTask = null;
-        this.broadcastRecommendationState();
-      }
-    }
-    void this.startNextSongIfIdle();
-    void this.refillRecommendations();
-    return this.getRecommendationState();
-  }
-
-  private filterFreshSongs(songs: Song[]) {
+  private filterFreshSongs(songs: Song[], allowRecent = false) {
     const seen = new Set([
-      ...this.recentSongIds,
+      ...(allowRecent ? this.recentSongIds.slice(-1) : this.recentSongIds),
+      ...this.excludedRecommendationIds,
       ...this.getQueue().map(song => song.id),
       ...(this.currentSong ? [this.currentSong.song.id] : []),
       ...(this.loadingSong ? [this.loadingSong.id] : []),
@@ -135,12 +108,19 @@ class SongQueueService {
   }
 
   private rememberSong(id: number) {
+    this.recentSongIds = this.recentSongIds.filter(songId => songId !== id);
     this.recentSongIds.push(id);
     if (this.recentSongIds.length > 100) this.recentSongIds.shift();
   }
 
+  private excludeRecommendation(id: number) {
+    this.excludedRecommendationIds = this.excludedRecommendationIds.filter(songId => songId !== id);
+    this.excludedRecommendationIds.push(id);
+    if (this.excludedRecommendationIds.length > 100) this.excludedRecommendationIds.shift();
+  }
+
   private refillRecommendations(): Promise<void> {
-    if (!this.recommendationsEnabled || this.dailyTask || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
+    if (!this.recommendationsEnabled || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
     if (this.refillTask) return this.refillTask;
     const generation = this.recommendationGeneration;
     this.recommendationLoading = true;
@@ -152,17 +132,41 @@ class SongQueueService {
   }
 
   private async loadPersonalFm(generation: number) {
+    const candidates: Song[] = [];
+    let added = 0;
     try {
       // Bounded requests avoid spinning when FM returns duplicates or no songs.
       for (let attempt = 0; attempt < 3 && this.recommendedQueue.length < 3; ++attempt) {
         const songs = await getPersonalFmSongs();
         if (generation !== this.recommendationGeneration) return;
+        candidates.push(...songs);
         const fresh = this.filterFreshSongs(songs);
-        this.recommendedQueue.push(...fresh.slice(0, 3 - this.recommendedQueue.length).map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'fm' as const })));
+        const additions = fresh.slice(0, 3 - this.recommendedQueue.length);
+        added += additions.length;
+        this.recommendedQueue.push(...additions.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'fm' as const })));
+        if (additions.length) {
+          this.broadcastQueue();
+          // Play the first available song while the remaining FM requests continue.
+          void this.startNextSongIfIdle();
+        }
       }
-      if (this.recommendedQueue.length < 3) this.recommendationError = '暂时没有新的 FM 歌曲，稍后会自动重试';
+      if (!added && !this.recommendedQueue.length) {
+        // A repeated upstream batch must not be rejected forever by playback history.
+        // Keep current, queued, skipped and unavailable songs excluded, as well as the last played song.
+        const fallback = this.filterFreshSongs(candidates, true)
+          .sort((a, b) => this.recentSongIds.indexOf(a.id) - this.recentSongIds.indexOf(b.id)).slice(0, 3);
+        this.recommendedQueue.push(...fallback.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'fm' as const })));
+        added += fallback.length;
+      }
+      if (!added && !this.recommendedQueue.length) {
+        this.recommendationError = '暂时没有可播放的 FM 歌曲，30 秒后自动重试';
+        console.warn('Private FM returned no eligible songs; retrying in 30 seconds.', { received: candidates.length });
+      }
     } catch {
-      if (generation === this.recommendationGeneration) this.recommendationError = '私人 FM 暂不可用，稍后会自动重试';
+      if (generation === this.recommendationGeneration) {
+        this.recommendationError = '私人 FM 请求失败，30 秒后自动重试';
+        console.warn('Private FM request failed; retrying in 30 seconds.');
+      }
     } finally {
       if (generation === this.recommendationGeneration) {
         this.recommendationLoading = false;
@@ -217,6 +221,7 @@ class SongQueueService {
     } catch {
       if (generation === this.generation) {
         this.rememberSong(nextSong.id);
+        if (nextSong.source === 'fm') this.excludeRecommendation(nextSong.id);
         console.warn('Skipping unavailable track:', nextSong.id);
       }
     } finally {
@@ -233,7 +238,8 @@ class SongQueueService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.loading = false;
-    if (this.loadingSong) this.rememberSong(this.loadingSong.id);
+    if (this.currentSong?.song.source === 'fm') this.excludeRecommendation(this.currentSong.song.id);
+    if (this.loadingSong?.source === 'fm') this.excludeRecommendation(this.loadingSong.id);
     this.loadingSong = null;
     this.finishCurrentSong();
     void this.startNextSongIfIdle();

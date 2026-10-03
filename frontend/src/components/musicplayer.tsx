@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import PauseRounded from '@mui/icons-material/PauseRounded';
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import SkipNextRounded from '@mui/icons-material/SkipNextRounded';
@@ -13,6 +13,7 @@ import VolumeUpRounded from '@mui/icons-material/VolumeUpRounded';
 import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
 import SongCover from '@/components/modelItem/SongCover';
+import PlayerGlass from '@/components/playerglass';
 
 export function formatDuration(ms: number) {
   const seconds = Math.floor(Math.max(0, Number.isFinite(ms) ? ms : 0) / 1000);
@@ -22,41 +23,90 @@ export function formatDuration(ms: number) {
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
   const { currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, isPreview, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const loadedPlayback = useRef<{ songId: number; url: string; startTime: number } | null>(null);
+  const playRequest = useRef(0);
+  const pausedByUser = useRef(false);
+  const autoplayBlocked = useRef(false);
   const [volume, setVolume] = useState(30);
   const lastVolume = useRef(30);
   const [showPlayPrompt, setShowPlayPrompt] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const songId = currentSong?.id;
+  const songDuration = currentSong?.duration || 0;
+
+  const alignPlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, songDuration / 1000));
+    setCurrentPosition(audio.currentTime * 1000);
+  }, [startTime, songDuration, setCurrentPosition]);
 
   const tryPlay = useCallback(async () => {
     const audio = audioRef.current;
-    if (!audio || !audioUrl) return;
+    if (!audio || !audioUrl || pausedByUser.current) return;
+    const request = ++playRequest.current;
+    alignPlayback();
     try {
-      await audio.play(); setShowPlayPrompt(false);
+      // Call play before awaiting anything so a click can authorize this audio element.
+      await audio.play();
+      if (request !== playRequest.current) return;
+      alignPlayback();
+      autoplayBlocked.current = false;
+      setShowPlayPrompt(false);
     } catch (error) {
-      if ((error as Error).name === 'NotAllowedError') setShowPlayPrompt(true);
-      else setNotice('音频暂时无法播放，请尝试重新同步');
+      if (request !== playRequest.current || pausedByUser.current) return;
+      const name = (error as Error).name;
+      if (name === 'AbortError') return;
+      autoplayBlocked.current = name === 'NotAllowedError';
+      setShowPlayPrompt(autoplayBlocked.current);
+      if (!autoplayBlocked.current) setNotice('音频暂时无法播放，请尝试重新同步');
       setIsPlaying(false);
     }
-  }, [audioUrl, setIsPlaying]);
+  }, [audioUrl, alignPlayback, setIsPlaying]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || isPreview) return;
     setNotice('');
-    setShowPlayPrompt(false);
-    if (!audioUrl || !currentSong) { audio.pause(); audio.removeAttribute('src'); audio.load(); return; }
-    audio.src = audioUrl;
-    const align = () => {
-      audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, currentSong.duration / 1000));
-      setCurrentPosition(audio.currentTime * 1000);
+    if (!audioUrl || songId === undefined) {
+      playRequest.current += 1;
+      loadedPlayback.current = null;
+      autoplayBlocked.current = false;
+      setShowPlayPrompt(false);
+      audio.pause(); audio.removeAttribute('src'); audio.load();
+      setIsPlaying(false);
+      return;
+    }
+    audio.addEventListener('loadedmetadata', alignPlayback);
+    const previous = loadedPlayback.current;
+    // REST and WebSocket may both send the same snapshot; reloading aborts pending play.
+    if (!previous || previous.songId !== songId || previous.url !== audioUrl || previous.startTime !== startTime || audio.error) {
+      playRequest.current += 1;
+      loadedPlayback.current = { songId, url: audioUrl, startTime };
+      autoplayBlocked.current = false;
+      setShowPlayPrompt(false);
+      audio.src = audioUrl;
+      audio.load();
+    }
+    if (!pausedByUser.current) void tryPlay();
+    return () => audio.removeEventListener('loadedmetadata', alignPlayback);
+  }, [audioUrl, startTime, playbackRevision, songId, isPreview, alignPlayback, tryPlay, setIsPlaying]);
+
+  useEffect(() => {
+    if (isPreview) return;
+    const onInteraction = (event: MouseEvent) => {
+      if (!event.isTrusted || !autoplayBlocked.current || pausedByUser.current) return;
+      // Playback buttons handle their own click; starting here would toggle them twice.
+      if (event.target instanceof Element && event.target.closest('[data-playback-control]')) return;
       void tryPlay();
     };
-    audio.addEventListener('loadedmetadata', align, { once: true });
-    audio.load();
-    return () => audio.removeEventListener('loadedmetadata', align);
-  }, [audioUrl, startTime, playbackRevision, currentSong, isPreview, setCurrentPosition, tryPlay]);
+    document.addEventListener('click', onInteraction, true);
+    return () => document.removeEventListener('click', onInteraction, true);
+  }, [isPreview, tryPlay]);
+
+  useEffect(() => () => { playRequest.current += 1; }, []);
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [volume]);
   useEffect(() => {
@@ -94,10 +144,20 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     if (audio.paused) {
-      // Resuming catches up to everyone instead of playing an old local position.
-      if (currentSong) audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, currentSong.duration / 1000));
+      pausedByUser.current = false;
       void tryPlay();
-    } else audio.pause();
+    } else {
+      pausedByUser.current = true;
+      autoplayBlocked.current = false;
+      playRequest.current += 1;
+      setShowPlayPrompt(false);
+      audio.pause();
+    }
+  };
+  const resyncPlayback = async () => {
+    pausedByUser.current = false;
+    void tryPlay();
+    await syncPlayback();
   };
   const download = async () => {
     if (!currentSong || !audioUrl) return;
@@ -117,8 +177,9 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
   const progress = currentSong?.duration ? Math.max(0, Math.min(100, currentPosition / currentSong.duration * 100)) : 0;
   return (
     <section className="player-dock" aria-label="音乐播放器">
+      <PlayerGlass />
       {notice && <p className="player-notice" role="status">{notice}</p>}
-      {showPlayPrompt && <button className="autoplay-prompt" onClick={togglePlayback}><PlayArrowRounded fontSize="small" />点击播放，加入此刻</button>}
+      {showPlayPrompt && <button className="autoplay-prompt" data-playback-control onClick={togglePlayback}><PlayArrowRounded fontSize="small" />自动播放受限，点击页面开始播放</button>}
       <div className="player-timeline" role="progressbar" aria-label="歌曲播放进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
         <div style={{ width: progress + '%' }} />
       </div>
@@ -126,20 +187,20 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
       <div className="player-row">
         <div className="player-track">
           <SongCover src={currentSong?.prcUrl} />
-          <div><strong>{currentSong?.name || '还没有歌曲'}</strong><span>{currentSong?.artist || '等你点一首'}</span></div>
+          <div><strong>{currentSong?.name || '还没有歌曲'}</strong>{currentSong?.artist && <span>{currentSong.artist}</span>}</div>
         </div>
-        <button className="sync-button" disabled={busy || isPreview} onClick={() => void perform(syncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
+        <button className="sync-button" data-playback-control disabled={busy || isPreview} onClick={() => void perform(resyncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
           <SyncRounded fontSize="small" /><span>{isPreview ? '预览' : connection === 'connected' ? '同步中' : '同步'}</span><i />
         </button>
         <div className="transport-controls">
           <button className="icon-button download-button" disabled={!audioUrl || busy} onClick={() => void perform(download)} title="下载歌曲" aria-label="下载歌曲"><DownloadRounded /></button>
-          <button className="play-button" onClick={togglePlayback} disabled={!currentSong || (!isPreview && !audioUrl)} title={isPlaying ? '仅暂停我的播放' : '加入同步播放'} aria-label={isPlaying ? '暂停播放' : '开始播放'}>{isPlaying ? <PauseRounded /> : <PlayArrowRounded />}</button>
+          <button className="play-button" data-playback-control onClick={togglePlayback} disabled={!currentSong || (!isPreview && !audioUrl)} title={isPlaying ? '仅暂停我的播放' : '加入同步播放'} aria-label={isPlaying ? '暂停播放' : '开始播放'}>{isPlaying ? <PauseRounded /> : <PlayArrowRounded />}</button>
           <button className="icon-button" onClick={() => void perform(skipNext)} disabled={busy || (!currentSong && !isPreview)} title="为大家切换下一首" aria-label="下一首"><SkipNextRounded /></button>
         </div>
         <button className={'icon-button lyrics-toggle ' + (showLyrics ? 'is-active' : '')} onClick={onToggleLyrics} aria-label={showLyrics ? '隐藏歌词' : '显示歌词'} aria-pressed={showLyrics} title="切换歌词"><LyricsOutlined /></button>
         <div className="volume-control">
           <button className="icon-button" onClick={() => { if (volume) { lastVolume.current = volume; setVolume(0); } else setVolume(lastVolume.current); }} aria-label={volume ? '静音' : '取消静音'} title={volume ? '静音' : '取消静音'}>{volume ? <VolumeUpRounded /> : <VolumeOffRounded />}</button>
-          <input aria-label="音量" type="range" min="0" max="100" value={volume} onChange={event => setVolume(Number(event.target.value))} />
+          <input aria-label="音量" type="range" min="0" max="100" value={volume} style={{ '--volume-percent': volume + '%' } as CSSProperties} onChange={event => setVolume(Number(event.target.value))} />
         </div>
         <button className="icon-button fullscreen-button" onClick={() => void perform(toggleFullscreen)} aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'}>{fullscreen ? <FullscreenExitRounded /> : <FullscreenRounded />}</button>
       </div>

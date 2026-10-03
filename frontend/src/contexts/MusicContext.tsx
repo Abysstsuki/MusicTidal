@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song } from '@/types/music';
 import { apiRequest, BACKEND_URL } from '@/lib/api';
-import { previewDailySongs, previewFmSongs, previewMessages, previewQueue, previewSong, previewUsers } from '@/lib/stage-preview';
+import { previewFmSongs, previewMessages, previewQueue, previewSong, previewUsers } from '@/lib/stage-preview';
 
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 type User = { username: string };
@@ -177,7 +177,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!preview || !recommendations.enabled) return;
-    const recommended = queue.filter(song => song.source === 'daily' || song.source === 'fm');
+    const recommended = queue.filter(song => song.source === 'fm');
     if (recommended.length <= 2) {
       const excluded = new Set([currentSong?.id, ...queue.map(song => song.id)]);
       const additions = previewFmSongs.filter(song => !excluded.has(song.id)).slice(0, 3 - recommended.length)
@@ -198,7 +198,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const enqueue = async (song: Song) => {
     if (preview) {
       const added: QueueSong = { ...song, instanceId: ++previewInstanceId.current, source: 'manual' };
-      setQueue(items => [...items.filter(item => !item.source || item.source === 'manual'), added, ...items.filter(item => item.source === 'daily' || item.source === 'fm')]); return;
+      setQueue(items => [...items.filter(item => !item.source || item.source === 'manual'), added, ...items.filter(item => item.source === 'fm')]); return;
     }
     await mutateQueue('add', { song });
   };
@@ -221,9 +221,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (preview) {
       if (enabled) {
         const excluded = new Set([currentSong?.id, ...queue.map(song => song.id)]);
-        const added = previewDailySongs.filter(song => !excluded.has(song.id)).map(song => ({ ...song, instanceId: ++previewInstanceId.current, source: 'daily' as const }));
+        const added = previewFmSongs.filter(song => !excluded.has(song.id)).slice(0, 3).map(song => ({ ...song, instanceId: ++previewInstanceId.current, source: 'fm' as const }));
         setQueue(items => [...items, ...added]);
-        setRecommendations({ enabled: true, loading: false, phase: 'daily', queued: added.length, error: null });
+        setRecommendations({ enabled: true, loading: false, phase: 'fm', queued: added.length, error: null });
       } else {
         setQueue(items => items.filter(item => !item.source || item.source === 'manual'));
         setRecommendations(idleRecommendations);

@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MusicTidal · 和你同频",
-  description: "一首歌，一段对话，一个共同的此刻。和大家一起同步听歌。",
+  title: "MusicTidal",
+  description: "多人同步音乐播放器，支持点歌、共享队列和聊天。",
 };
 
 export default function RootLayout({

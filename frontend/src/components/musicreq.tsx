@@ -68,7 +68,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     {error && <p className="inline-error" role="status">{error}</p>}
     {notice && <p className="inline-success" role="status">{notice}</p>}
     <div className="song-list" aria-busy={loading}>
-      {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '这一首，想听什么？'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map(song => <div className="song-row" key={song.id}>
+      {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '搜索歌曲'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map(song => <div className="song-row" key={song.id}>
         <SongCover src={song.prcUrl} /><div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}</span></div>
         <button className="icon-button add-song-button" onClick={() => void add(song)} disabled={pending !== null} aria-label={'点歌 ' + song.name} title="加入待播">{added === song.id ? <CheckRounded /> : <AddRounded />}</button>
       </div>)}

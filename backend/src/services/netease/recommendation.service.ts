@@ -32,20 +32,17 @@ export function normalizeRecommendedSongs(input: unknown): Song[] {
   });
 }
 
-async function fetchRecommendations(endpoint: string, kind: 'daily' | 'fm'): Promise<Song[]> {
+export async function getPersonalFmSongs(): Promise<Song[]> {
   try {
-    const response = await neteaseHttp.get(endpoint, {
+    const response = await neteaseHttp.get('/personal_fm', {
       // Retain unique request markers; the embedded adapter never caches recommendations.
       params: { timestamp: Date.now() + '-' + ++requestSequence },
     });
     const body = response.data;
     if (body?.code !== 200) throw new Error('Recommendation service unavailable');
-    return normalizeRecommendedSongs(kind === 'daily' ? body.data?.dailySongs ?? body.recommend : body.data);
+    return normalizeRecommendedSongs(body.data);
   } catch {
     // Never forward upstream responses, cookies or request options to browsers/logs.
-    throw new Error(kind === 'daily' ? '每日推荐暂不可用，请检查网易云登录状态或稍后重试' : '私人 FM 暂不可用，稍后会自动重试');
+    throw new Error('私人 FM 暂不可用，请检查网易云登录状态或稍后重试');
   }
 }
-
-export const getDailyRecommendedSongs = () => fetchRecommendations('/recommend/songs', 'daily');
-export const getPersonalFmSongs = () => fetchRecommendations('/personal_fm', 'fm');

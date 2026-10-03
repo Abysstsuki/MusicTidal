@@ -16,7 +16,7 @@ export default function UserInfo() {
       <span className="listener-avatar"><AccountCircleOutlined /></span><span className="account-name">{user?.username || '登录'}</span>{user && <ExpandMoreRounded fontSize="small" />}
     </button>
     {showMenu && <><button className="account-menu-backdrop" aria-label="关闭账户菜单" onClick={() => setShowMenu(false)} /><div className="account-menu">
-      <p>{user?.username}</p><span>{isPreview ? '这是视觉预览账户' : '和大家一起，让音乐发生'}</span>
+      <p>{user?.username}</p>{isPreview && <span>这是视觉预览账户</span>}
       {isPreview ? <button onClick={() => window.location.assign('/')}>返回真实听歌</button> : <button onClick={() => { logout(); setShowMenu(false); }}><LogoutRounded fontSize="small" />退出登录</button>}
     </div></>}
     {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLoginSuccess={login} />}

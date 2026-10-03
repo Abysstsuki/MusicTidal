@@ -70,12 +70,12 @@ export const skipToNextHandler = (_req: Request, res: Response) => {
     return;
 };
 
-export const startDailyRecommendationsHandler = async (_req: Request, res: Response) => {
+export const startPersonalFmHandler = async (_req: Request, res: Response) => {
     try {
-        const recommendations = await songQueueService.startDailyRecommendations();
+        const recommendations = await songQueueService.startPersonalFm();
         res.json({ success: true, recommendations });
-    } catch (error) {
-        res.status(502).json({ error: (error as Error).message });
+    } catch {
+        res.status(500).json({ error: '无法开启私人 FM，请稍后重试' });
     }
 };
 

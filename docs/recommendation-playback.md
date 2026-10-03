@@ -1,13 +1,14 @@
-# 日推与私人 FM 续播
+# 私人 FM 续播
 
-打开「待播」，点击「开启日推」。服务端用现有网易云 Cookie 获取当天推荐，加载到共享队列，沿用现有的播放地址、定时切歌与 WebSocket 同步。
+打开「待播」，点击「开启 FM」。服务端直接用现有网易云 Cookie 获取私人 FM，不再请求每日推荐。所有人共用同一个 FM 队列，沿用现有的播放地址、定时切歌与 WebSocket 同步。打开网页本身不会开启 FM。
 
 - 手动点歌排在推荐歌曲之前；当前歌曲正常播完后，优先播放手动队列。
-- 日推按返回顺序播放。推荐队列剩余不超过 2 首时，提前通过私人 FM 补充到 3 首，日推耗尽后继续播放 FM。
-- 排除当前歌曲、正在获取播放地址的歌曲、队列内歌曲及最近 100 次播放、跳过或移除的推荐歌曲，避免短时间重复。单次 FM 补充最多请求 3 次，失败或暂无新歌时等待 30 秒再重试。
+- FM 队列剩余不超过 2 首时，提前补充到 3 首。获取到第一首后即可开始播放，无需等待这一轮全部请求完成。
+- 优先排除最近 100 首已播歌曲。单次补充最多请求 3 次；如果全是历史歌曲且 FM 队列为空，允许较早听过的歌曲重新进入队列，避免去重导致永久无歌。当前歌曲、正在获取播放地址的歌曲、队列内歌曲及最后播放的歌曲仍不能重复加入。
+- 被跳过、移除或无法播放的 FM 另行排除，最多记录 100 首，历史歌曲回填也不会重新加入这些歌曲。
 - 不可播放的歌曲自动跳过；FM 暂不可用时，现有歌曲和手动点歌仍可继续播放。
 - 「停止续播」移除待播推荐、取消补歌，不中断当前歌曲，也不删除手动点歌。把推荐歌曲置顶会将它转为手动点歌，停止续播后仍保留。
-- 日推加载失败会显示提示，可以重新开启。正在加载时也可停止；停止前发出的请求不会恢复旧推荐队列。
+- 请求失败或暂无可播放歌曲时，保留 FM 开关，显示提示并等待 30 秒自动重试，不返回“日推无新歌”的 502。正在加载时也可停止；停止前发出的请求不会恢复旧推荐队列。
 
 推荐基于服务端 Cookie 所属网易云账号，全房间共用，没有新增个人网易云登录。启动、停止和歌曲队列都存放在内存，重启后需要重新开启。网易云调用已经内嵌到 backend，授权支持 `NETEASE_COOKIE` 或原有 `backend/cookie.txt`，详见 [内嵌网易云 API](backend-netease.md)。
 
@@ -15,15 +16,15 @@
 
 | 接口 | 用途 |
 |---|---|
-| `POST /api/queue/recommendations/start` | 开启日推；重复开启不会重复加入歌曲 |
+| `POST /api/queue/recommendations/start` | 直接开启私人 FM；重复开启共用同一补歌任务 |
 | `POST /api/queue/recommendations/stop` | 停止续播，移除推荐待播 |
 | `GET /api/queue/list` | 返回 `queue` 和 `recommendations` 状态 |
 
-推荐开关响应返回 `{ success, recommendations }`。状态字段为 `enabled`、`loading`、`phase`、`queued`、`error`；`phase` 表示日推加载或 FM 补充阶段，`queued` 为尚未播放的推荐歌曲数量。
+推荐开关响应返回 `{ success, recommendations }`。状态字段为 `enabled`、`loading`、`phase`、`queued`、`error`；开启时 `phase` 为 `fm`，停止时为 `null`，`queued` 为尚未播放的 FM 歌曲数量。FM 请求失败通过 `recommendations.error` 返回，并保持 `enabled: true` 以便自动恢复。
 
-队列歌曲新增 `source: manual | daily | fm`。沿用 `QUEUE_UPDATED` 与 `PLAY_SONG`，新增 `RECOMMENDATIONS_UPDATED` 广播房间推荐状态；新连接也会收到这一状态。前端避免较早的 REST 响应覆盖新的 WebSocket 状态。
+队列歌曲使用 `source: manual | fm`。沿用 `QUEUE_UPDATED` 与 `PLAY_SONG`，通过 `RECOMMENDATIONS_UPDATED` 广播房间 FM 状态；新连接也会收到这一状态。前端避免较早的 REST 响应覆盖新的 WebSocket 状态。
 
-日推和 FM 字段通过 `recommendation.service.ts` 统一转换。保留不同的请求时间戳，内部调用层对日推和 FM 始终直接请求，不使用缓存。错误消息经过收敛，不向浏览器传递上游请求配置或凭据。
+FM 字段通过 `recommendation.service.ts` 统一转换。保留不同的请求时间戳，内部调用层对 FM 始终直接请求，不使用缓存。错误消息经过收敛，不向浏览器传递上游请求配置或凭据。补歌失败日志只记录失败类别及返回数量。
 
 ## 本地使用
 

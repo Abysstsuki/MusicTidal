@@ -23,7 +23,7 @@ export default function ChatBox() {
   return (
     <div className="chat-content">
       <div className="chat-history" aria-label="聊天记录" role="log" aria-live="polite">
-        {!messages.length && <div className="panel-empty"><AccountCircleOutlined /><p>音乐之外，也聊点什么。</p><span>{user ? '和大家分享你的听歌心情' : '登录后加入聊天，音乐已经为你准备好'}</span></div>}
+        {!messages.length && <div className="panel-empty"><AccountCircleOutlined /><p>暂无消息</p>{!user && <span>登录后可以发送消息</span>}</div>}
         {messages.map((message, index) => <div className={'chat-message ' + (message.username === user?.username ? 'is-me' : '')} key={index}>
           <div className="listener-avatar" aria-hidden="true"><AccountCircleOutlined /></div>
           <div><span className="message-author">{message.username}</span><p>{message.text}</p></div>
@@ -34,7 +34,7 @@ export default function ChatBox() {
       {user ? <form className="chat-composer" onSubmit={submit}>
         <input aria-label="聊天消息" placeholder={connection === 'connected' || isPreview ? '说点什么…' : '正在重新连接…'} value={input} onChange={event => setInput(event.target.value)} maxLength={500} autoComplete="off" />
         <button className="icon-button" type="submit" title="发送消息" aria-label="发送消息" disabled={!input.trim() || (!isPreview && connection !== 'connected')}><SendRounded /></button>
-      </form> : <button className="login-chat-button" onClick={() => setShowAuth(true)}>登录，加入这场对话</button>}
+      </form> : <button className="login-chat-button" onClick={() => setShowAuth(true)}>登录后聊天</button>}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLoginSuccess={login} />}
     </div>
   );

@@ -85,12 +85,11 @@ function Stage() {
       <section className="track-heading" aria-label="当前歌曲">
         <p className="eyebrow">NOW PLAYING</p>
         <h1>{currentSong?.name || '等待第一首歌'}</h1>
-        <p className="track-artist">{currentSong?.artist || '一起，让音乐发生。'}</p>
-        <p className="track-note">{isPreview ? '演示歌曲 · 仅供视觉预览' : currentSong ? '此刻，和大家一起听' : '点一首歌，分享此刻的心情'}</p>
+        {currentSong?.artist && <p className="track-artist">{currentSong.artist}</p>}
+        {isPreview && <p className="track-note">演示歌曲 · 仅供视觉预览</p>}
       </section>
 
       {showLyrics && <MusicLyrics />}
-      {!showLyrics && <div className="lyrics-hidden-label">让音乐填满这一刻。</div>}
 
       <nav className="stage-tools" aria-label="听歌互动">
         <button className={'pill-button chat-launch ' + (panel === 'chat' ? 'is-active' : '')} onClick={event => togglePanel('chat', event.currentTarget)} aria-expanded={panel === 'chat'} aria-controls="stage-panel">
@@ -104,7 +103,7 @@ function Stage() {
       {panel && (
         <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
           <div className="popover-heading">
-            <h2>{panel === 'search' ? <><MusicNoteRounded />点一首，大家一起听</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
+            <h2>{panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
             <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
           </div>
           {panel === 'chat' && <ChatBox />}

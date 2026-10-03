@@ -16,14 +16,14 @@ export const previewQueue: QueueSong[] = [
   { id: -7, name: '晚风', artist: '伍佰', duration: 248000, prcUrl: 'https://p1.music.126.net/DeKGN_wQwihLZRBcHSQ-EA==/109951171315893199.jpg' },
 ].map((song, index) => ({ ...song, instanceId: index + 1 }));
 
-export const previewDailySongs: Song[] = [
+const additionalPreviewFmSongs: Song[] = [
   { id: -8, name: 'Blinding Lights', artist: 'The Weeknd', duration: 200000, prcUrl: previewSong.prcUrl },
   { id: -9, name: '日落大道', artist: '梁博', duration: 264000, prcUrl: previewQueue[4].prcUrl },
   { id: -10, name: 'Yellow', artist: 'Coldplay', duration: 269000, prcUrl: previewQueue[2].prcUrl },
 ];
 
 // Preview FM rotates fixtures locally; it never enables the real room's refill.
-export const previewFmSongs: Song[] = [previewSong, ...previewQueue, ...previewDailySongs];
+export const previewFmSongs: Song[] = [previewSong, ...previewQueue, ...additionalPreviewFmSongs];
 
 export const previewMessages: ChatMessage[] = [
   { username: 'Yuki', text: '这首好适合今晚。' },

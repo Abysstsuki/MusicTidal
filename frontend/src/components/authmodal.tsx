@@ -34,7 +34,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
   };
   return <StageDialog label={isRegister ? '注册账户' : '登录账户'} onClose={onClose}>
     <div className="auth-header"><span className="wordmark">Music<span>Tidal</span></span><button className="icon-button" onClick={onClose} aria-label="关闭登录"><CloseRounded /></button></div>
-    <div className="auth-intro"><p className="eyebrow">ON THE SAME FREQUENCY</p><h2>{isRegister ? '找到你的同频。' : '欢迎回来，一起听。'}</h2><p>一首歌，一段对话，一个共同的此刻。</p></div>
+    <div className="auth-intro"><h2>{isRegister ? '注册账户' : '登录账户'}</h2></div>
     <form className="auth-form" onSubmit={event => void submit(event)}>
       {isRegister && <label>昵称<input required maxLength={40} autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} placeholder="大家怎么称呼你？" /></label>}
       <label>邮箱<input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="你的邮箱" /></label>
