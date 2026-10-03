@@ -76,6 +76,11 @@ button svg { flex-shrink: 0; }
 .track-note { margin: 0; font-size: 14px; color: var(--text-secondary); }
 .stage-lyrics { position: absolute; z-index: 1; top: 38%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 110px); max-width: 1100px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; font-family: var(--font-lyrics), "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; font-kerning: normal; pointer-events: none; text-shadow: 0 2px 22px rgba(0,0,0,.38); }
 .stage-lyrics p { text-wrap: balance; }
+.lyric-copy { width: 100%; display: flex; flex-direction: column; align-items: center; gap: inherit; }
+.lyric-surface { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; visibility: hidden; }
+.stage-lyrics[data-webgl="ready"] .lyric-copy { opacity: 0; }
+.stage-lyrics[data-webgl="ready"] .lyric-surface { visibility: visible; }
+.stage-lyrics[data-webgl="ready"] .lyric-current { animation: none; }
 .lyric-adjacent { margin: 0; font-size: clamp(18px, 2.1vw, 32px); line-height: 1.65; font-weight: 400; letter-spacing: .02em; color: rgba(246,233,237,.6); overflow-wrap: anywhere; max-width: 95%; }
 .lyric-current > p:first-child { margin: 0; color: #fff8f6; font-size: clamp(28px, 4.15vw, 62px); line-height: 1.5; letter-spacing: .035em; font-weight: 600; overflow-wrap: anywhere; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
 .lyric-current { animation: lyric-in .45s ease both; }
@@ -208,7 +213,7 @@ button svg { flex-shrink: 0; }
 .listener-list { padding: 12px 20px; max-height: 380px; overflow-y: auto; }
 .listener-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; }
 .listener-row small { color: var(--accent); margin-left: auto; }
-@keyframes lyric-in { from { opacity: .6; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes lyric-in { from { opacity: .6; } to { opacity: 1; } }
 @keyframes popover-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 1700px) {
   .stage-lyrics { top: 39%; }

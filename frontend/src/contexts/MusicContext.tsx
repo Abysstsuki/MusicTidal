@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { quietRhythm, type RhythmReader } from '@/lib/audio-rhythm';
 import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song } from '@/types/music';
 import { apiRequest, BACKEND_URL } from '@/lib/api';
 import { previewHeartSongs, previewMessages, previewQueue, previewSong, previewUsers } from '@/lib/stage-preview';
@@ -8,6 +9,8 @@ import { previewHeartSongs, previewMessages, previewQueue, previewSong, previewU
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 type User = { username: string };
 interface MusicContextType {
+  audioRef: RefObject<HTMLAudioElement | null>;
+  rhythmReader: RefObject<RhythmReader>;
   currentSong: Song | null;
   currentPosition: number;
   isPlaying: boolean;
@@ -45,6 +48,8 @@ export function useMusicContext() {
 }
 
 export function MusicProvider({ children }: { children: ReactNode }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rhythmReader = useRef<RhythmReader>(quietRhythm);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -253,5 +258,5 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setUser(null); setMessages([]); setOnlineUsers([]);
   };
 
-  return <MusicContext.Provider value={{ currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, queue, recommendations, messages, onlineUsers, user, isPreview: !!preview, setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue, startRecommendations, stopRecommendations, sendChat, login, logout }}>{children}</MusicContext.Provider>;
+  return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, queue, recommendations, messages, onlineUsers, user, isPreview: !!preview, setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue, startRecommendations, stopRecommendations, sendChat, login, logout }}>{children}</MusicContext.Provider>;
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Noto_Sans_SC } from 'next/font/google';
 import { useMusicContext } from '@/contexts/MusicContext';
 import { apiRequest } from '@/lib/api';
+import CurvedLyrics from '@/components/curvedlyrics';
 
 const lyricsFont = Noto_Sans_SC({
   weight: 'variable',
@@ -62,13 +63,9 @@ export default function MusicLyrics() {
   const center = isPreview ? '歌词预览' : loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '暂无歌词');
   const after = isPreview ? '下一句歌词' : lyrics[index + 1]?.text || '';
   return (
-    <section className={`${lyricsFont.variable} stage-lyrics`} aria-label="同步歌词">
-      <p className="lyric-adjacent lyric-before">{before || '\u00a0'}</p>
-      <div className="lyric-current" key={String(songId) + '-' + index}>
-        <p>{center}</p>
-        {translation && translation !== active?.text && <p className="lyric-translation">{translation}</p>}
-      </div>
-      <p className="lyric-adjacent lyric-after">{after || '\u00a0'}</p>
-    </section>
+    <CurvedLyrics before={before} center={center} after={after}
+      translation={translation !== active?.text ? translation : undefined}
+      lineKey={String(songId) + '-' + index} animated={isPreview || !!active}
+      fontClass={lyricsFont.variable} />
   );
 }

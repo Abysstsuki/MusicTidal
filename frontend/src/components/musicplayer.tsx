@@ -14,6 +14,7 @@ import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
 import SongCover from '@/components/modelItem/SongCover';
 import PlayerGlass from '@/components/playerglass';
+import { useAudioRhythm } from '@/hooks/use-audio-rhythm';
 
 export function formatDuration(ms: number) {
   const seconds = Math.floor(Math.max(0, Number.isFinite(ms) ? ms : 0) / 1000);
@@ -21,9 +22,20 @@ export function formatDuration(ms: number) {
 }
 
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
-  const { currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, isPreview, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const loadedPlayback = useRef<{ songId: number; url: string; startTime: number } | null>(null);
+  const { audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, isPreview, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const [nonCorsUrl, setNonCorsUrl] = useState<string | null>(null);
+  const corsEnabled = nonCorsUrl !== audioUrl;
+  useAudioRhythm(audioRef, rhythmReader);
+  const bindAudio = useCallback((node: HTMLAudioElement | null) => {
+    const previous = audioRef.current;
+    if (previous && previous !== node) {
+      // Ref replay in development must not erase a loaded track or its position.
+      previous.pause();
+      if (node) { previous.removeAttribute('src'); previous.load(); }
+    }
+    audioRef.current = node;
+  }, [audioRef]);
+  const loadedPlayback = useRef<{ songId: number; url: string; startTime: number; cors: boolean } | null>(null);
   const playRequest = useRef(0);
   const pausedByUser = useRef(false);
   const autoplayBlocked = useRef(false);
@@ -41,7 +53,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     if (!audio || audio.readyState < HTMLMediaElement.HAVE_METADATA) return;
     audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, songDuration / 1000));
     setCurrentPosition(audio.currentTime * 1000);
-  }, [startTime, songDuration, setCurrentPosition]);
+  }, [audioRef, startTime, songDuration, setCurrentPosition]);
 
   const tryPlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -64,7 +76,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
       if (!autoplayBlocked.current) setNotice('音频暂时无法播放，请尝试重新同步');
       setIsPlaying(false);
     }
-  }, [audioUrl, alignPlayback, setIsPlaying]);
+  }, [audioRef, audioUrl, alignPlayback, setIsPlaying]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -82,9 +94,9 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     audio.addEventListener('loadedmetadata', alignPlayback);
     const previous = loadedPlayback.current;
     // REST and WebSocket may both send the same snapshot; reloading aborts pending play.
-    if (!previous || previous.songId !== songId || previous.url !== audioUrl || previous.startTime !== startTime || audio.error) {
+    if (!previous || previous.songId !== songId || previous.url !== audioUrl || previous.startTime !== startTime || previous.cors !== corsEnabled || !audio.getAttribute('src') || audio.error) {
       playRequest.current += 1;
-      loadedPlayback.current = { songId, url: audioUrl, startTime };
+      loadedPlayback.current = { songId, url: audioUrl, startTime, cors: corsEnabled };
       autoplayBlocked.current = false;
       setShowPlayPrompt(false);
       audio.src = audioUrl;
@@ -92,7 +104,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     }
     if (!pausedByUser.current) void tryPlay();
     return () => audio.removeEventListener('loadedmetadata', alignPlayback);
-  }, [audioUrl, startTime, playbackRevision, songId, isPreview, alignPlayback, tryPlay, setIsPlaying]);
+  }, [audioRef, audioUrl, startTime, playbackRevision, songId, isPreview, corsEnabled, alignPlayback, tryPlay, setIsPlaying]);
 
   useEffect(() => {
     if (isPreview) return;
@@ -108,7 +120,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
 
   useEffect(() => () => { playRequest.current += 1; }, []);
 
-  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [volume]);
+  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [audioRef, volume, corsEnabled]);
   useEffect(() => {
     const onFullscreen = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFullscreen);
@@ -204,7 +216,10 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
         </div>
         <button className="icon-button fullscreen-button" onClick={() => void perform(toggleFullscreen)} aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'}>{fullscreen ? <FullscreenExitRounded /> : <FullscreenRounded />}</button>
       </div>
-      <audio ref={audioRef} hidden onTimeUpdate={event => setCurrentPosition(event.currentTarget.currentTime * 1000)} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => { if (audioUrl) { setIsPlaying(false); setNotice('这首歌暂时无法播放，请重新同步或切换歌曲'); } }} />
+      <audio key={corsEnabled ? 'cors' : 'native'} ref={bindAudio} crossOrigin={corsEnabled ? 'anonymous' : undefined} hidden onTimeUpdate={event => setCurrentPosition(event.currentTarget.currentTime * 1000)} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => {
+        if (audioUrl && corsEnabled) { setNonCorsUrl(audioUrl); return; }
+        if (audioUrl) { setIsPlaying(false); setNotice('这首歌暂时无法播放，请重新同步或切换歌曲'); }
+      }} />
     </section>
   );
 }
