@@ -1,4 +1,4 @@
-import { neteaseHttp } from '../../utils/neteaseHttp';
+import { neteaseHttp, type NeteaseClient } from '../../utils/neteaseHttp';
 interface SongSearchResult {
     id: number;
     name: string;
@@ -7,8 +7,8 @@ interface SongSearchResult {
     album: string;
     duration: number;
 }
-export const searchSongByKeyword = async (keywords: string, offset: number = 0, limit: number = 10): Promise<{ songs: SongSearchResult[]; total: number }> => {
-    const response = await neteaseHttp.get('/cloudsearch', {
+export const searchSongByKeyword = async (keywords: string, offset: number = 0, limit: number = 10, client: NeteaseClient = neteaseHttp): Promise<{ songs: SongSearchResult[]; total: number }> => {
+    const response = await client.get('/cloudsearch', {
         params: {
             keywords,
             type: 1,
@@ -19,7 +19,7 @@ export const searchSongByKeyword = async (keywords: string, offset: number = 0, 
 
     const result = response.data?.result;
     if (!result) {
-        throw new Error(`Netease API returned no result field. code=${response.data?.code} body=${JSON.stringify(response.data).slice(0, 200)}`);
+        throw new Error('网易云搜索暂不可用');
     }
 
     const songs = result.songs;
@@ -41,8 +41,8 @@ export const searchSongByKeyword = async (keywords: string, offset: number = 0, 
 };
 
 
-export const getSongPlayInfo = async (songId: string) => {
-    const response = await neteaseHttp.get('/song/url/v1', {
+export const getSongPlayInfo = async (songId: string, client: NeteaseClient = neteaseHttp) => {
+    const response = await client.get('/song/url/v1', {
         params: {
             id: songId,
             level: 'exhigh',
@@ -61,8 +61,8 @@ export const getSongPlayInfo = async (songId: string) => {
     };
 };
 
-export const getSongLyric = async (songId: string) => {
-    const response = await neteaseHttp.get('/lyric', {
+export const getSongLyric = async (songId: string, client: NeteaseClient = neteaseHttp) => {
+    const response = await client.get('/lyric', {
         params: {
             id: songId,
         },

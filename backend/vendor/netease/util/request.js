@@ -43,6 +43,7 @@ const chooseUserAgent = (ua = false) => {
 }
 const createRequest = (method, url, data = {}, options) => {
   return new Promise((resolve, reject) => {
+    const decryptResponse = options.crypto === 'eapi' && data.e_r !== false
     let headers = { 'User-Agent': chooseUserAgent(options.ua) }
     options.headers = options.headers || {}
     headers = {
@@ -117,6 +118,7 @@ const createRequest = (method, url, data = {}, options) => {
       }
       if (cookie.MUSIC_U) header['MUSIC_U'] = cookie.MUSIC_U
       if (cookie.MUSIC_A) header['MUSIC_A'] = cookie.MUSIC_A
+      if (cookie.NMTID) header['NMTID'] = cookie.NMTID
       headers['Cookie'] = Object.keys(header)
         .map(
           (key) =>
@@ -154,19 +156,10 @@ const createRequest = (method, url, data = {}, options) => {
           x.replace(/\s*Domain=[^(;|$)]+;*/, ''),
         )
         try {
-          if (options.crypto === 'eapi') {
+          if (decryptResponse) {
             answer.body = JSON.parse(encrypt.decrypt(body).toString())
           } else {
-            answer.body = body
-          }
-
-          answer.status = Number(answer.body.code || res.status)
-          if (
-            [201, 302, 400, 502, 800, 801, 802, 803].indexOf(answer.body.code) >
-            -1
-          ) {
-            // 特殊状态码
-            answer.status = 200
+            answer.body = Buffer.isBuffer(body) ? JSON.parse(body.toString()) : body
           }
         } catch (e) {
           try {
@@ -175,9 +168,12 @@ const createRequest = (method, url, data = {}, options) => {
             // can't decrypt and can't parse directly
             answer.body = body
           }
-          answer.status = res.status
         }
-
+        if (answer.body.code) answer.body.code = Number(answer.body.code)
+        answer.status = Number(answer.body.code || res.status)
+        if ([201, 302, 400, 502, 800, 801, 802, 803].includes(answer.body.code)) {
+          answer.status = 200
+        }
         answer.status =
           100 < answer.status && answer.status < 600 ? answer.status : 400
         if (answer.status === 200) resolve(answer)

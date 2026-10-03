@@ -1,8 +1,7 @@
-import { PrismaClient } from '../generated/prisma';
+import { prisma } from '../utils/prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const prisma = new PrismaClient();
 
 export const getUserById = async (userId: number) => {
     return prisma.user.findUnique({
@@ -19,6 +18,7 @@ export async function registerUser(username: string, email: string, password: st
     const hashed = await bcrypt.hash(password, 10);
     return prisma.user.create({
         data: { username, email, password: hashed },
+        select: { id: true, username: true, email: true },
     });
 }
 

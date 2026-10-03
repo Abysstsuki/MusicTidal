@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getSongLyric } from '../../services/netease/song.service';
+import { Room } from '../../services/roomManager';
 
 export const getSongLyricHandler = async (req: Request, res: Response): Promise<void> => {
     const songId = req.query.id as string;
@@ -10,10 +11,9 @@ export const getSongLyricHandler = async (req: Request, res: Response): Promise<
     }
     
     try {
-        const lyricData = await getSongLyric(songId);
+        const lyricData = await getSongLyric(songId, (res.locals.room as Room).client);
         res.json({ success: true, data: lyricData });
     } catch (err) {
-        console.error('获取歌词失败:', err);
         res.status(500).json({ error: 'Failed to fetch song lyric' });
     }
 };

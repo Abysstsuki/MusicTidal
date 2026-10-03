@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { searchSongByKeyword } from '../../services/netease/song.service';
+import { Room } from '../../services/roomManager';
 
 export const searchSongHandler = async (req: Request, res: Response): Promise<void> => {
     const keywords = req.query.keywords as string;
@@ -12,11 +13,9 @@ export const searchSongHandler = async (req: Request, res: Response): Promise<vo
     }
 
     try {
-        const { songs, total } = await searchSongByKeyword(keywords, offset, limit);
+        const { songs, total } = await searchSongByKeyword(keywords, offset, limit, (res.locals.room as Room).client);
         res.json({ success: true, data: songs, total, offset, limit });
     } catch (err: any) {
-        const detail = err?.message || String(err);
-        console.error('搜索失败:', detail, err?.response?.status, err?.code);
-        res.status(500).json({ success: false, error: `Failed to search songs: ${detail}` });
+        res.status(502).json({ success: false, error: '歌曲暂时无法搜索，请稍后重试' });
     }
 };

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Noto_Sans_SC } from 'next/font/google';
 import { useMusicContext } from '@/contexts/MusicContext';
-import { apiRequest } from '@/lib/api';
 import CurvedLyrics from '@/components/curvedlyrics';
 
 const lyricsFont = Noto_Sans_SC({
@@ -31,7 +30,7 @@ export function parseLyric(lyric: string): LyricLine[] {
 }
 
 export default function MusicLyrics() {
-  const { currentSong, currentPosition, isPreview } = useMusicContext();
+  const { currentSong, currentPosition, isPreview, requestRoom } = useMusicContext();
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [translations, setTranslations] = useState<LyricLine[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,7 +41,7 @@ export default function MusicLyrics() {
     if (!songId || isPreview) return;
     const controller = new AbortController();
     setLoading(true);
-    apiRequest<{ success: boolean; data?: { lyric: string; tlyric?: string } }>('/api/netease/lyric?id=' + songId, { signal: controller.signal })
+    requestRoom<{ success: boolean; data?: { lyric: string; tlyric?: string } }>('/netease/lyric?id=' + songId, { signal: controller.signal })
       .then(data => {
         if (!controller.signal.aborted && data.success && data.data) {
           setLyrics(parseLyric(data.data.lyric));
@@ -51,7 +50,7 @@ export default function MusicLyrics() {
       }).catch(() => { if (!controller.signal.aborted) setFailed(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [songId, isPreview]);
+  }, [songId, isPreview, requestRoom]);
 
   const position = currentPosition / 1000;
   const foundIndex = lyrics.findIndex((line, index) => position >= line.time && (!lyrics[index + 1] || position < lyrics[index + 1].time));

@@ -119,6 +119,10 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
   }, [isPreview, tryPlay]);
 
   useEffect(() => () => { playRequest.current += 1; }, []);
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => { if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); } };
+  }, [audioRef, corsEnabled]);
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [audioRef, volume, corsEnabled]);
   useEffect(() => {

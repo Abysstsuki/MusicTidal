@@ -1,6 +1,9 @@
 // Static imports keep the embedded subset self-contained and visible to bundlers.
 const request = require('./util/request')
 const modules = {
+  login_qr_key: require('./module/login_qr_key'),
+  login_qr_check: require('./module/login_qr_check'),
+  login_status: require('./module/login_status'),
   cloudsearch: require('./module/cloudsearch'),
   song_url_v1: require('./module/song_url_v1'),
   lyric: require('./module/lyric'),

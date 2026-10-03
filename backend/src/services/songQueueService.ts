@@ -1,12 +1,19 @@
 import { RecommendationState, Song, SongWithInstance } from '../types/song';
-import { broadcast, setCurrentSongInfo } from './websocketServer';
-import { getSongPlayInfo } from './netease/song.service';
 import { HeartModeError, HeartModeSession } from './netease/recommendation.service';
 
-class SongQueueService {
+export interface QueueDependencies {
+  getPlayInfo: (id: string) => Promise<{ url: string; time: number }>;
+  createHeartSession: (initialSongId?: number) => Pick<HeartModeSession, 'nextSongs'>;
+  emit: (event: { type: string; payload: unknown }) => void;
+}
+
+export class SongQueueService {
+  constructor(private readonly dependencies: QueueDependencies) {}
+  private disposed = false;
+  private playbackRevision = 0;
   private queue: SongWithInstance[] = [];
   private currentInstanceId = 0;
-  private currentSong: { song: SongWithInstance; startTime: number } | null = null;
+  private currentSong: { song: SongWithInstance; url: string; startTime: number } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private loading = false;
   private loadingSong: SongWithInstance | null = null;
@@ -21,9 +28,10 @@ class SongQueueService {
   private refillRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private recentSongIds: number[] = [];
   private excludedRecommendationIds: number[] = [];
-  private heartModeSession: HeartModeSession | null = null;
+  private heartModeSession: Pick<HeartModeSession, 'nextSongs'> | null = null;
 
   getCurrentSong() { return this.currentSong; }
+  getPlayback() { return { song: this.currentSong?.song || null, url: this.currentSong?.url || '', startTime: this.currentSong?.startTime || 0, playbackRevision: this.playbackRevision }; }
   getQueue() { return [...this.queue, ...this.recommendedQueue]; }
   peek() { return this.queue[0] || this.recommendedQueue[0]; }
   getRecommendationState(): RecommendationState {
@@ -31,6 +39,7 @@ class SongQueueService {
   }
 
   enqueue(song: Song) {
+    if (this.disposed) throw new Error('房间已结束');
     const added: SongWithInstance = { ...song, instanceId: ++this.currentInstanceId, source: 'manual' };
     this.queue.push(added);
     this.broadcastQueue();
@@ -66,12 +75,13 @@ class SongQueueService {
   }
 
   async startHeartMode(): Promise<RecommendationState> {
+    if (this.disposed) return this.getRecommendationState();
     if (!this.recommendationsEnabled) {
       ++this.recommendationGeneration;
       this.recommendationsEnabled = true;
       this.recommendationPhase = 'heart';
       this.recommendationError = null;
-      this.heartModeSession = new HeartModeSession(this.currentSong?.song.id);
+      this.heartModeSession = this.dependencies.createHeartSession(this.currentSong?.song.id);
       this.broadcastRecommendationState();
     }
     await this.refillRecommendations();
@@ -135,7 +145,7 @@ class SongQueueService {
     return this.refillTask;
   }
 
-  private async loadHeartMode(generation: number, session: HeartModeSession) {
+  private async loadHeartMode(generation: number, session: Pick<HeartModeSession, 'nextSongs'>) {
     const candidates: Song[] = [];
     let added = 0;
     try {
@@ -196,7 +206,7 @@ class SongQueueService {
   }
 
   async startNextSongIfIdle() {
-    if (this.currentSong || this.loading) return;
+    if (this.disposed || this.currentSong || this.loading) return;
     if (!this.peek()) { void this.refillRecommendations(); return; }
     this.loading = true;
     const generation = this.generation;
@@ -206,7 +216,7 @@ class SongQueueService {
     this.broadcastQueue();
     void this.refillRecommendations();
     try {
-      const playInfo = await getSongPlayInfo(String(nextSong.id));
+      const playInfo = await this.dependencies.getPlayInfo(String(nextSong.id));
       if (generation !== this.generation) return;
       if (nextSong.source !== 'manual' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.length)) {
         if (this.recommendationsEnabled && recommendationGeneration === this.recommendationGeneration) this.recommendedQueue.unshift(nextSong);
@@ -214,14 +224,14 @@ class SongQueueService {
         return;
       }
       if (!playInfo?.url) throw new Error('No playable URL');
-      const duration = nextSong.duration > 0 ? nextSong.duration : playInfo.time;
+      const duration = playInfo.time > 0 ? Math.min(nextSong.duration || playInfo.time, playInfo.time) : nextSong.duration;
       if (!Number.isFinite(duration) || duration <= 0) throw new Error('Invalid song duration');
       const song = { ...nextSong, duration };
       const startTime = Date.now();
-      this.currentSong = { song, startTime };
+      this.currentSong = { song, url: playInfo.url, startTime };
+      ++this.playbackRevision;
       this.rememberSong(song.id);
-      setCurrentSongInfo(song, playInfo.url, startTime);
-      broadcast({ type: 'PLAY_SONG', payload: { song, url: playInfo.url, startTime } });
+      this.emit({ type: 'PLAY_SONG', payload: this.getPlayback() });
       // Song duration is milliseconds. Only the server advances shared playback.
       this.timer = setTimeout(() => {
         if (generation !== this.generation) return;
@@ -244,7 +254,8 @@ class SongQueueService {
     }
   }
 
-  skipToNext() {
+  skipToNext(expectedRevision = this.playbackRevision) {
+    if (this.disposed || expectedRevision !== this.playbackRevision) return;
     this.generation += 1;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -258,14 +269,34 @@ class SongQueueService {
 
   private finishCurrentSong() {
     this.currentSong = null;
-    setCurrentSongInfo(null, '', 0);
-    broadcast({ type: 'PLAY_SONG', payload: { song: null, url: '', startTime: 0 } });
+    ++this.playbackRevision;
+    this.emit({ type: 'PLAY_SONG', payload: this.getPlayback() });
   }
   private broadcastQueue() {
-    broadcast({ type: 'QUEUE_UPDATED', payload: this.getQueue() });
+    this.emit({ type: 'QUEUE_UPDATED', payload: this.getQueue() });
     this.broadcastRecommendationState();
   }
-  private broadcastRecommendationState() { broadcast({ type: 'RECOMMENDATIONS_UPDATED', payload: this.getRecommendationState() }); }
+  private broadcastRecommendationState() { this.emit({ type: 'RECOMMENDATIONS_UPDATED', payload: this.getRecommendationState() }); }
+  private emit(event: { type: string; payload: unknown }) { if (!this.disposed) this.dependencies.emit(event); }
+  resetAuthorization() {
+    if (this.disposed) return;
+    if (!this.currentSong) {
+      ++this.generation;
+      if (this.loadingSong?.source === 'manual') this.queue.unshift(this.loadingSong);
+      this.loadingSong = null; this.loading = false;
+    }
+    this.excludedRecommendationIds = [];
+    this.stopRecommendations();
+  }
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    ++this.generation; ++this.recommendationGeneration;
+    if (this.timer) clearTimeout(this.timer);
+    if (this.refillRetryTimer) clearTimeout(this.refillRetryTimer);
+    this.timer = null; this.refillRetryTimer = null;
+    this.queue = []; this.recommendedQueue = []; this.currentSong = null;
+    this.heartModeSession = null; this.refillTask = null; this.loadingSong = null;
+    this.loading = false; this.recommendationsEnabled = false; this.recommendationLoading = false;
+  }
 }
-
-export const songQueueService = new SongQueueService();

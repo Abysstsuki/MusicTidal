@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { HttpError } from '../utils/httpError';
 
 export function errorHandler(
   err: any,
@@ -6,10 +7,11 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
-  console.error(err.stack);
-
-  res.status(err.status || 500).json({
+  const status = err instanceof HttpError ? err.status : err.status === 400 ? 400 : 500;
+  if (status >= 500) console.warn('API request failed:', req.method, req.path);
+  res.status(status).json({
     success: false,
-    message: err.message || '服务器内部错误',
+    error: err instanceof HttpError ? err.message : status === 400 ? '请求格式错误' : '服务暂不可用，请稍后重试',
+    code: err instanceof HttpError ? err.code : undefined,
   });
 }

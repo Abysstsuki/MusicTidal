@@ -1,164 +1,67 @@
-// services/websocketServer.ts
 import { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { getSongPlayInfo } from '../services/netease/song.service';
-
-const onlineUsers = new Set<string>();
-const recentMessages: { username: string; text: string }[] = [];
-const MAX_HISTORY = 25;
-
-let wss: WebSocketServer;
-
-// 当前正在播放的歌曲信息
-let currentSong: any = null;
-let currentStartTime: number = 0;
+import { verifyAccessToken } from '../middlewares/authMiddleware';
+import { getUserById } from './userService';
+import { roomManager, type RoomConnection } from './roomManager';
+import { HttpError } from '../utils/httpError';
 
 export function setupWebSocketServer(server: Server) {
-    wss = new WebSocketServer({ server });
-
-    wss.on('connection', (ws: WebSocket) => {
-        let username: string | undefined;
-
-        // Guests can see listening presence without creating a fake user identity.
-        ws.send(JSON.stringify({ type: 'update', users: Array.from(onlineUsers) }));
-
-        // 新连接：如果有正在播放的歌曲，推送当前播放状态
-        if (currentSong && currentStartTime) {
-            ws.send(JSON.stringify({
-                type: 'PLAY_SONG',
-                payload: {
-                    song: currentSong,
-                    url: currentSong.url,
-                    startTime: currentStartTime,
-                },
-            }));
-        }
-
-        // 推送当前队列（延迟导入避免循环依赖）
-        try {
-            const { songQueueService } = require('../services/songQueueService');
-            const queue = songQueueService.getQueue();
-            ws.send(JSON.stringify({
-                type: 'QUEUE_UPDATED',
-                payload: queue,
-            }));
-            ws.send(JSON.stringify({ type: 'RECOMMENDATIONS_UPDATED', payload: songQueueService.getRecommendationState() }));
-        } catch (e) {
-            // songQueueService 可能尚未初始化，忽略
-        }
-
-        ws.on('message', (data) => {
-            try {
-                const message = JSON.parse(data.toString());
-
-                switch (message.type) {
-                    case 'join':
-                        username = message.username;
-                        if (username) {
-                            onlineUsers.add(username);
-                            broadcastOnlineUsers();
-
-                            // 推送历史聊天记录
-                            ws.send(JSON.stringify({
-                                type: 'history',
-                                messages: recentMessages,
-                            }));
-                        }
-                        break;
-
-                    case 'leave':
-                        if (message.username) {
-                            onlineUsers.delete(message.username);
-                            broadcastOnlineUsers();
-                        }
-                        break;
-
-                    case 'chat':
-                        if (message.username && message.text) {
-                            if (recentMessages.length >= MAX_HISTORY) {
-                                recentMessages.shift();
-                            }
-                            recentMessages.push({
-                                username: message.username,
-                                text: message.text,
-                            });
-
-                            broadcast({
-                                type: 'chat',
-                                username: message.username,
-                                text: message.text,
-                            });
-                        }
-                        break;
-
-                    default:
-                        console.warn('Unknown message type:', message.type);
-                        break;
-                }
-            } catch (e) {
-                console.error('Invalid message format', e);
-            }
-        });
-
-        ws.on('close', () => {
-            if (username) {
-                onlineUsers.delete(username);
-                broadcastOnlineUsers();
-            }
-        });
-    });
-    console.log('✅ WebSocket server initialized');
-}
-
-function broadcastOnlineUsers() {
-    const userList = Array.from(onlineUsers);
-    broadcast({ type: 'update', users: userList });
-}
-
-export function broadcast(message: string | object) {
-    if (!wss) return;
-    const payload = typeof message === 'string' ? message : JSON.stringify(message);
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(payload);
-        }
-    });
-}
-
-// 对外暴露：设置当前播放的歌曲并广播给所有客户端
-export async function setCurrentPlayingSong(song: any) {
-    const playInfo = await getSongPlayInfo(song.id); // 获取播放 URL 和其他信息
-    currentSong = {
-        id: song.id,
-        name: song.name,
-        artist: song.artist,
-        prcUrl: song.prcUrl,
-        duration: song.duration,
-        url: playInfo.url,
-    };
-
-    currentStartTime = Date.now();
-
-    broadcast({
-        type: 'PLAY_SONG',
-        payload: {
-            song: currentSong,
-            startTime: currentStartTime,
-        },
-    });
-}
-
-// 供 songQueueService 同步当前播放状态（避免各自维护一份造成新连接收不到推送）
-export function setCurrentSongInfo(song: any | null, url: string, startTime: number) {
-    if (song) {
-        currentSong = { ...song, url };
-    } else {
-        currentSong = null;
+  const wss = new WebSocketServer({ server, maxPayload: 16 * 1024 });
+  const lastPong = new Map<WebSocket, number>();
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (Date.now() - (lastPong.get(ws) || 0) >= 60_000) ws.terminate();
+      else if (ws.readyState === WebSocket.OPEN) ws.ping();
     }
-    currentStartTime = startTime;
-}
-
-// 可供其他模块使用的广播函数
-export function broadcastToAll(message: string | object) {
-    broadcast(message);
+  }, 30_000);
+  heartbeat.unref();
+  wss.on('close', () => clearInterval(heartbeat));
+  wss.on('connection', ws => {
+    let identity: { userId: number; roomId: string } | null = null;
+    let authenticating = false;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const authDeadline = setTimeout(() => ws.close(4001, 'Authentication required'), 10_000);
+    lastPong.set(ws, Date.now());
+    ws.on('pong', () => lastPong.set(ws, Date.now()));
+    const connection: RoomConnection = {
+      send: event => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event)); },
+      close: () => ws.close(4000, 'Room closed'),
+    };
+    ws.on('message', async raw => {
+      try {
+        const message = JSON.parse(raw.toString());
+        if (!identity) {
+          if (authenticating) return;
+          if (message.type !== 'AUTH' || typeof message.roomId !== 'string') throw new HttpError(401, '请先登录并加入房间');
+          authenticating = true;
+          const access = verifyAccessToken(message.token);
+          const user = await getUserById(access.userId);
+          if (!user) throw new HttpError(401, '请重新登录');
+          if (ws.readyState !== WebSocket.OPEN) return;
+          roomManager.member(message.roomId, user.id);
+          identity = { userId: user.id, roomId: message.roomId };
+          clearTimeout(authDeadline);
+          expiry = setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ERROR', roomId: identity!.roomId, payload: { error: '登录已过期，请重新登录', code: 'AUTH_EXPIRED' } }));
+            ws.close(4001, 'Session expired');
+          }, Math.max(0, access.expiresAt - Date.now()));
+          roomManager.connect(identity.roomId, identity.userId, connection);
+          return;
+        }
+        if (message.roomId !== identity.roomId) throw new HttpError(403, '房间不匹配');
+        if (message.type === 'chat') roomManager.chat(identity.roomId, identity.userId, message.text);
+        else throw new HttpError(400, '消息类型无效');
+      } catch (error) {
+        const problem = error instanceof HttpError ? error : new HttpError(400, '消息无效');
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ERROR', roomId: identity?.roomId, payload: { error: problem.message, code: problem.code || (problem.status === 401 ? 'AUTH_EXPIRED' : 'REQUEST_FAILED') } }));
+        if (!identity) ws.close(4001, 'Admission failed');
+      } finally { authenticating = false; }
+    });
+    ws.on('error', () => {});
+    ws.on('close', () => {
+      clearTimeout(authDeadline); clearTimeout(expiry); lastPong.delete(ws);
+      if (identity) roomManager.disconnect(identity.roomId, identity.userId, connection);
+    });
+  });
+  return wss;
 }

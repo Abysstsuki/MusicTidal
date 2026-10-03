@@ -1,0 +1,89 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import CloseRounded from '@mui/icons-material/CloseRounded';
+import { apiRequest, ApiError } from '@/lib/api';
+import type { NeteaseBinding as Binding } from '@/types/room';
+import StageDialog from './StageDialog';
+
+type Qr = { sessionId: string; image: string; expiresAt: number };
+export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => void; onChanged?: () => Promise<void> }) {
+  const [binding, setBinding] = useState<Binding | null>(null);
+  const [qr, setQr] = useState<Qr | null>(null);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const session = useRef<string | null>(null);
+  const mounted = useRef(true);
+  const generation = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    const version = generation;
+    const controller = new AbortController();
+    apiRequest<Binding>('/api/user/netease', { signal: controller.signal }).then(setBinding).catch(problem => { if (!controller.signal.aborted) setError(problem.message); });
+    return () => {
+      mounted.current = false; ++version.current; controller.abort();
+      if (session.current) void apiRequest('/api/user/netease/qr/' + session.current, { method: 'DELETE', keepalive: true }).catch(() => {});
+    };
+  }, []);
+  useEffect(() => {
+    if (!qr) return;
+    let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    const poll = async () => {
+      if (Date.now() >= qr.expiresAt) { setQr(null); session.current = null; setStatus('二维码已过期，请重新生成'); return; }
+      try {
+        const result = await apiRequest<{ status: string; binding?: Binding }>('/api/user/netease/qr/' + qr.sessionId + '/check', { method: 'POST', signal: controller.signal });
+        if (stopped) return;
+        setError('');
+        if (result.status === 'authorized' && result.binding) {
+          setBinding(result.binding); setQr(null); session.current = null; setStatus('绑定成功，可以在房间开启心动模式');
+          await onChanged?.(); return;
+        }
+        if (result.status === 'expired' || Date.now() >= qr.expiresAt) { setQr(null); session.current = null; setStatus('二维码已过期，请重新生成'); return; }
+        setStatus(result.status === 'scanned' ? '已扫码，请在网易云 App 中确认' : '使用网易云 App 扫描二维码');
+      } catch (problem) {
+        if (!stopped) {
+          if (problem instanceof ApiError && ['NETEASE_QR_ACCOUNT_PENDING', 'NETEASE_QR_CREDENTIAL_PENDING', 'NETEASE_BINDING_SAVE_FAILED', 'NETEASE_BINDING_SCHEMA_OUTDATED'].includes(problem.code || '')) setStatus('已收到扫码授权，正在完成绑定');
+          setError((problem as Error).message);
+        }
+      }
+      if (!stopped) timer = setTimeout(() => void poll(), 2000);
+    };
+    void poll();
+    return () => { stopped = true; clearTimeout(timer); controller.abort(); };
+  }, [qr, onChanged]);
+  const createQr = async () => {
+    const version = ++generation.current;
+    setBusy(true); setError(''); setQr(null);
+    try {
+      if (session.current) await apiRequest('/api/user/netease/qr/' + session.current, { method: 'DELETE' });
+      const next = await apiRequest<Qr>('/api/user/netease/qr', { method: 'POST' });
+      if (!mounted.current || version !== generation.current) {
+        await apiRequest('/api/user/netease/qr/' + next.sessionId, { method: 'DELETE' }); return;
+      }
+      session.current = next.sessionId; setQr(next); setStatus('使用网易云 App 扫描二维码');
+    } catch (problem) { if (mounted.current) setError((problem as Error).message); }
+    finally { if (mounted.current) setBusy(false); }
+  };
+  const unbind = async () => {
+    ++generation.current; setQr(null); session.current = null; setBusy(true); setError('');
+    try {
+      await apiRequest('/api/user/netease', { method: 'DELETE' });
+      if (mounted.current) { setBinding({ status: 'unbound', profile: null, boundAt: null }); setStatus('已解除绑定'); }
+      await onChanged?.();
+    } catch (problem) { if (mounted.current) setError((problem as Error).message); }
+    finally { if (mounted.current) setBusy(false); }
+  };
+  return <StageDialog label="绑定网易云账号" onClose={onClose}>
+    <div className="auth-header"><h2>网易云账号</h2><button className="icon-button" aria-label="关闭绑定" onClick={onClose}><CloseRounded /></button></div>
+    <p className="panel-description">绑定后，你创建的房间将使用这个账号播放，并支持红心歌单心动续播。</p>
+    <div className="binding-status"><strong>{binding?.profile?.nickname || '尚未绑定'}</strong><span>{binding?.status === 'bound' ? '已绑定' : binding?.status === 'expired' ? '授权已过期，请重新扫码' : '游客授权'}</span></div>
+    {qr && <div className="qr-image"><Image src={qr.image} alt="使用网易云 App 扫码登录" width={256} height={256} unoptimized /></div>}
+    {status && <p role="status" className="panel-description">{status}</p>}
+    {error && <p className="inline-error" role="alert">{error}</p>}
+    <div className="dialog-actions"><button className="primary-button" disabled={busy} onClick={() => void createQr()}>{busy ? '请稍等…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定'}</button>
+      {binding?.status !== 'unbound' && binding && <button className="pill-button" disabled={busy} onClick={() => void unbind()}>解除绑定</button>}</div>
+  </StageDialog>;
+}

@@ -12,6 +12,9 @@ export interface NeteaseResponse {
 }
 
 export type NeteaseModule = (query?: NeteaseQuery) => Promise<NeteaseResponse>;
+export const login_qr_key: NeteaseModule;
+export const login_qr_check: NeteaseModule;
+export const login_status: NeteaseModule;
 
 export function cookieToJson(cookie?: string): Record<string, string>;
 export const cloudsearch: NeteaseModule;

@@ -42,4 +42,5 @@ USER node
 
 EXPOSE 3001
 
-CMD ["node", "dist/server.js"]
+# Apply pending migrations before accepting requests; stop if migration fails.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node dist/server.js"]

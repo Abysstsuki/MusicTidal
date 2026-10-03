@@ -1,123 +1,115 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
-import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
-import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
-import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
-import QueueMusicRounded from '@mui/icons-material/QueueMusicRounded';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import LockOutlined from '@mui/icons-material/LockOutlined';
+import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
+import AddRounded from '@mui/icons-material/AddRounded';
+import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
-import MusicPlayer from '@/components/musicplayer';
-import MusicLyrics from '@/components/musiclyrics';
-import ChatBox from '@/components/chatbox';
-import MusicQueue from '@/components/musicqueue';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiRequest, ApiError } from '@/lib/api';
+import type { RoomSummary } from '@/types/room';
 import UserInfo from '@/components/userinfo';
-import OnlineUser from '@/components/onlineuser';
-import MusicReq from '@/components/musicreq';
-import { MusicProvider, useMusicContext } from '@/contexts/MusicContext';
+import AuthModal from '@/components/authmodal';
+import StageDialog from '@/components/StageDialog';
+import NeteaseBinding from '@/components/NeteaseBinding';
+import ActiveRoomChoice from '@/components/ActiveRoomChoice';
+import SongCover from '@/components/modelItem/SongCover';
 
-type Panel = 'chat' | 'queue' | 'search' | null;
-
-function StageBackground({ src }: { src?: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) return null;
-  return <Image className={'stage-background ' + (loaded ? 'is-loaded' : '')} src={src} alt="" aria-hidden="true" fill priority sizes="100vw" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />;
-}
-
-function Stage() {
-  const { currentSong, connection, queue, isPreview } = useMusicContext();
-  const [panel, setPanel] = useState<Panel>('chat');
-  const [showLyrics, setShowLyrics] = useState(true);
-  const panelRef = useRef<HTMLElement>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const closePanel = () => {
-    setPanel(null);
-    triggerRef.current?.focus();
-  };
-  const togglePanel = (next: Exclude<Panel, null>, trigger: HTMLButtonElement) => {
-    triggerRef.current = trigger;
-    setPanel(value => value === next ? null : next);
-  };
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 1100px)');
-    const collapse = () => { if (media.matches) setPanel(null); };
-    collapse();
-    media.addEventListener('change', collapse);
-    return () => media.removeEventListener('change', collapse);
+type Action = { kind: 'create' } | { kind: 'join'; room: RoomSummary };
+export default function Home() {
+  const auth = useAuth();
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [filter, setFilter] = useState('');
+  const [action, setAction] = useState<Action | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [showBinding, setShowBinding] = useState(false);
+  const [active, setActive] = useState<RoomSummary | null>(null);
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const sequence = useRef(0);
+  const authCompleted = useRef(false);
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    const version = ++sequence.current;
+    try {
+      const data = await apiRequest<{ rooms: RoomSummary[] }>('/api/rooms', { signal });
+      if (!signal?.aborted && version === sequence.current) { setRooms(data.rooms); setLoadError(''); }
+    } catch (problem) { if (!signal?.aborted && version === sequence.current) setLoadError((problem as Error).message); }
+    finally { if (!signal?.aborted && version === sequence.current) setLoading(false); }
   }, []);
   useEffect(() => {
-    if (!panel) return;
-    if (triggerRef.current) {
-      const target = panel === 'search' ? 'input' : '[data-close-panel]';
-      panelRef.current?.querySelector<HTMLElement>(target)?.focus();
+    const controller = new AbortController();
+    setNotice(sessionStorage.getItem('room-notice') || ''); sessionStorage.removeItem('room-notice');
+    void refresh(controller.signal);
+    const interval = setInterval(() => void refresh(controller.signal), 10000);
+    return () => { controller.abort(); clearInterval(interval); };
+  }, [refresh]);
+  useEffect(() => {
+    setActive(null);
+    if (!auth.user) return;
+    const controller = new AbortController();
+    apiRequest<{ room: RoomSummary | null }>('/api/user/active-room', { signal: controller.signal }).then(data => { if (!controller.signal.aborted) setActive(data.room); }).catch(() => {});
+    return () => controller.abort();
+  }, [auth.user]);
+  const open = (next: Action) => {
+    setAction(next); setError(''); setPassword(''); setName('');
+    if (!auth.user) { authCompleted.current = false; setShowAuth(true); }
+  };
+  const handleProblem = async (problem: unknown) => {
+    if (problem instanceof ApiError && problem.code === 'ACTIVE_ROOM') {
+      const current = await apiRequest<{ room: RoomSummary | null }>('/api/user/active-room'); setActive(current.room);
     }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setPanel(null);
-        triggerRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [panel]);
-  const status = isPreview ? '视觉预览' : { connected: '同步中', connecting: '连接中', reconnecting: '重新连接', offline: '等待连接' }[connection];
-
-  return (
-    <main className="music-stage">
-      <StageBackground key={currentSong?.prcUrl || 'empty'} src={currentSong?.prcUrl} />
-      <div className="stage-shade" aria-hidden="true" />
-      <header className="stage-header">
-        <Link className="wordmark" href="/" aria-label="MusicTidal 首页" onClick={event => { if (isPreview) { event.preventDefault(); window.location.assign('/'); } }}>Music<span>Tidal</span></Link>
-        <div className={'connection-status ' + (connection === 'connected' ? 'is-connected' : '')} role="status">
-          <GraphicEqRounded fontSize="small" /><span>{status}</span><i />
-        </div>
-        <div className="header-actions">
-          <OnlineUser />
-          <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
-            <MusicNoteRounded fontSize="small" /><span>点歌</span>
-          </button>
-          <UserInfo />
-        </div>
-      </header>
-
-      <section className="track-heading" aria-label="当前歌曲">
-        <p className="eyebrow">NOW PLAYING</p>
-        <h1>{currentSong?.name || '等待第一首歌'}</h1>
-        {currentSong?.artist && <p className="track-artist">{currentSong.artist}</p>}
-        {isPreview && <p className="track-note">演示歌曲 · 仅供视觉预览</p>}
-      </section>
-
-      {showLyrics && <MusicLyrics />}
-
-      <nav className="stage-tools" aria-label="听歌互动">
-        <button className={'pill-button chat-launch ' + (panel === 'chat' ? 'is-active' : '')} onClick={event => togglePanel('chat', event.currentTarget)} aria-expanded={panel === 'chat'} aria-controls="stage-panel">
-          <ChatBubbleOutlineRounded fontSize="small" /><span>聊天</span>
-        </button>
-        <button className={'pill-button ' + (panel === 'queue' ? 'is-active' : '')} onClick={event => togglePanel('queue', event.currentTarget)} aria-expanded={panel === 'queue'} aria-controls="stage-panel">
-          <QueueMusicRounded fontSize="small" /><span>待播</span><span className="queue-count">{String(queue.length).padStart(2, '0')}</span>
-        </button>
-      </nav>
-
-      {panel && (
-        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
-          <div className="popover-heading">
-            <h2>{panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
-            <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
-          </div>
-          {panel === 'chat' && <ChatBox />}
-          {panel === 'queue' && <MusicQueue />}
-          {panel === 'search' && <MusicReq isVisible />}
-        </aside>
-      )}
-
-      <MusicPlayer showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(value => !value)} />
-      {isPreview && <button className="preview-label" onClick={() => window.location.assign('/')}>视觉预览 · 返回真实听歌</button>}
-    </main>
-  );
-}
-
-export default function Home() {
-  return <MusicProvider><Stage /></MusicProvider>;
+    setError((problem as Error).message);
+  };
+  const enter = async (room: RoomSummary) => {
+    setBusy(true); setError('');
+    try {
+      await apiRequest('/api/rooms/' + room.id + '/join', { method: 'POST', body: JSON.stringify({ password }) });
+      window.location.assign('/room?roomId=' + room.id);
+    } catch (problem) { await handleProblem(problem); }
+    finally { setBusy(false); }
+  };
+  useEffect(() => {
+    if (auth.user && action?.kind === 'join' && !action.room.locked && (!active || active.id === action.room.id)) void enter(action.room);
+    // Resume the selected room after login; password rooms wait for the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.user?.id, action]);
+  const create = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const data = await apiRequest<{ room: RoomSummary }>('/api/rooms', { method: 'POST', body: JSON.stringify({ name: name.trim(), password: password || undefined }) });
+      window.location.assign('/room?roomId=' + data.room.id);
+    } catch (problem) { await handleProblem(problem); }
+    finally { setBusy(false); }
+  };
+  const visible = rooms.filter(room => (room.name + room.host.username).toLowerCase().includes(filter.toLowerCase()));
+  return <main className="room-lobby">
+    <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">找一个房间，一起听。</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}<UserInfo /></div></header>
+    <section className="lobby-intro"><div><p className="eyebrow">LISTEN TOGETHER</p><h1>正在一起听</h1><p>进入房间，分享下一首歌。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
+    {notice && <p className="lobby-notice" role="status">{notice}</p>}
+    {auth.error && <p className="inline-error" role="alert">{auth.error} <button className="pill-button" onClick={auth.retry}>重试登录状态</button></p>}
+    {active && !action && <ActiveRoomChoice room={active} onLeft={() => { setActive(null); void refresh(); }} />}
+    <section className="lobby-rooms" aria-label="房间列表"><div className="lobby-list-heading"><h2>房间 <span>{rooms.length}</span></h2><div><input aria-label="搜索房间" placeholder="搜索房间或房主" value={filter} onChange={event => setFilter(event.target.value)} /><button className="icon-button" aria-label="刷新房间列表" onClick={() => void refresh()}><RefreshRounded /></button></div></div>
+      {loadError && <p className="inline-error" role="alert">{loadError}</p>}
+      {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <article className="room-card" key={room.id}>
+        <div className="room-card-heading"><span className="room-listening"><HeadphonesRounded fontSize="small" />{room.onlineCount} 人在线</span>{room.locked && <span className="room-lock"><LockOutlined fontSize="small" />密码房间</span>}</div>
+        <h2>{room.name}</h2><p className="room-host">房主 · {room.host.username}</p>
+        <div className="room-card-track"><SongCover src={room.currentSong?.prcUrl} /><div><strong>{room.currentSong?.name || '等待第一首歌'}</strong><span>{room.currentSong?.artist || '入房后可以点歌'}</span></div></div>
+        {room.hostDisconnectedUntil && <p className="room-away">房主暂时离线，等待重连</p>}
+        <button className="room-enter" disabled={busy || auth.loading} onClick={() => open({ kind: 'join', room })}>进入房间 <span>↗</span></button>
+      </article>)}</div>}
+    </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入 <Link href="/room?preview=1">查看听歌界面预览</Link></footer>
+    {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token) => { authCompleted.current = true; auth.login(username, token); setShowAuth(false); }} />}
+    {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} />}
+    {action && auth.user && !auth.loading && <StageDialog label={action.kind === 'create' ? '创建房间' : '加入房间'} onClose={() => { if (!busy) { setAction(null); setPassword(''); } }}><div className="auth-header"><h2>{action.kind === 'create' ? '创建房间' : action.room.name}</h2><button className="icon-button" disabled={busy} aria-label="关闭房间操作" onClick={() => { setAction(null); setPassword(''); }}><CloseRounded /></button></div>
+      {active && (action.kind === 'create' || active.id !== action.room.id) ? <ActiveRoomChoice room={active} onLeft={() => { setActive(null); setError(''); if (action.kind === 'join' && !action.room.locked) void enter(action.room); }} /> : action.kind === 'create' ? <form className="auth-form" onSubmit={event => void create(event)}><label>房间名称<input required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder="给房间起个名字" /></label><label>密码（可选）<input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="留空则无需密码" /></label><p className="panel-description">你将成为房主，主动离开时房间结束。网易云账号可以稍后绑定。</p><button className="primary-button" disabled={busy}>{busy ? '正在创建…' : '创建并进入'}</button></form> : action.room.locked ? <form className="auth-form" onSubmit={event => { event.preventDefault(); void enter(action.room); }}><label>房间密码<input required type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)} /></label><button className="primary-button" disabled={busy}>{busy ? '正在加入…' : '进入房间'}</button></form> : <><p role="status">{busy ? '正在加入房间…' : '准备加入房间'}</p>{!busy && <button className="primary-button" onClick={() => void enter(action.room)}>进入房间</button>}</>}
+      {error && <p className="inline-error" role="alert">{error}</p>}
+    </StageDialog>}
+  </main>;
 }

@@ -10,7 +10,7 @@ import {
     stopRecommendationsHandler
 } from '../controllers/queueController';
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
 
 router.post('/add', addSongToQueue);
 router.get('/list', getQueue);

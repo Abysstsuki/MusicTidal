@@ -4,11 +4,11 @@ import { useState } from 'react';
 import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined';
 import LogoutRounded from '@mui/icons-material/LogoutRounded';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
-import { useMusicContext } from '@/contexts/MusicContext';
+import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from './authmodal';
 
-export default function UserInfo() {
-  const { user, login, logout, isPreview } = useMusicContext();
+export default function UserInfo({ isPreview = false }: { isPreview?: boolean }) {
+  const { user, login, logout } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   return <div className="account">
@@ -17,7 +17,7 @@ export default function UserInfo() {
     </button>
     {showMenu && <><button className="account-menu-backdrop" aria-label="关闭账户菜单" onClick={() => setShowMenu(false)} /><div className="account-menu">
       <p>{user?.username}</p>{isPreview && <span>这是视觉预览账户</span>}
-      {isPreview ? <button onClick={() => window.location.assign('/')}>返回真实听歌</button> : <button onClick={() => { logout(); setShowMenu(false); }}><LogoutRounded fontSize="small" />退出登录</button>}
+      {isPreview ? <button onClick={() => window.location.assign('/')}>返回大厅</button> : <button onClick={() => { void logout(); setShowMenu(false); }}><LogoutRounded fontSize="small" />退出登录</button>}
     </div></>}
     {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLoginSuccess={login} />}
   </div>;

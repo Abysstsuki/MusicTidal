@@ -20,5 +20,9 @@ model User {
   email       String   @unique
   password    String
   neteaseInfo String?   @unique
+  neteaseCookieEncrypted String? @db.Text
+  neteaseProfile Json?
+  neteaseBoundAt DateTime?
+  neteaseInvalidAt DateTime?
   createdAt   DateTime @default(now())
 }

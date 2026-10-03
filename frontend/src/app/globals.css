@@ -25,6 +25,67 @@
   --font-sans: var(--font-inter), "Microsoft YaHei", sans-serif;
   --font-mono: monospace;
 }
+
+/* Rooms share the listening stage's typography, panels and accent. */
+.room-lobby { min-height: 100dvh; max-width: 1440px; margin: auto; padding: 28px 5vw 36px; }
+.lobby-header { display: flex; align-items: center; gap: 28px; }
+.lobby-tagline { color: var(--text-muted); font-size: 13px; }
+.lobby-account { margin-left: auto; display: flex; align-items: center; gap: 20px; }
+.lobby-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 72px 0 40px; }
+.lobby-intro h1 { font-size: clamp(32px, 4vw, 48px); margin: 12px 0; letter-spacing: -1.5px; }
+.lobby-intro p:not(.eyebrow) { color: var(--text-secondary); margin: 0; }
+.lobby-intro .primary-button { width: auto; gap: 10px; }
+.lobby-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 0; border-top: 1px solid var(--line-light); }
+.lobby-list-heading h2 { margin: 0; font-size: 16px; }
+.lobby-list-heading h2 span { color: var(--text-muted); margin-left: 10px; font-size: 13px; }
+.lobby-list-heading > div { display: flex; align-items: center; gap: 12px; }
+.lobby-list-heading input { width: 220px; padding: 10px 14px; border: 1px solid var(--line-light); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); }
+.room-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.room-card { display: flex; flex-direction: column; padding: 24px; border: 1px solid var(--line-light); border-radius: 20px; background: linear-gradient(140deg, rgba(250,67,84,.035), transparent 70%), var(--bg-panel); }
+.room-card-heading { display: flex; justify-content: space-between; gap: 12px; color: var(--text-muted); font-size: 12px; }
+.room-listening, .room-lock { display: inline-flex; align-items: center; gap: 6px; }
+.room-listening { color: var(--accent-green); }
+.room-card h2 { overflow-wrap: anywhere; margin: 28px 0 8px; font-size: 22px; line-height: 1.4; }
+.room-host { color: var(--text-muted); font-size: 13px; margin: 0 0 25px; }
+.room-card-track { display: flex; gap: 12px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line-light); margin-top: auto; }
+.room-card-track > div:last-child { min-width: 0; }
+.room-card-track strong, .room-card-track span { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.room-card-track strong { font-size: 13px; font-weight: 500; }
+.room-card-track span { color: var(--text-muted); font-size: 12px; margin-top: 5px; }
+.room-enter { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 13px 0 0; border: 0; border-top: 1px solid var(--line-light); background: none; color: var(--text-primary); text-align: left; }
+.room-enter:hover { color: var(--accent); }
+.room-away { color: var(--text-secondary); font-size: 12px; }
+.lobby-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; border: 1px dashed var(--line-light); border-radius: 20px; color: var(--text-muted); text-align: center; padding: 24px; }
+.lobby-empty > svg { font-size: 38px; color: var(--accent); }
+.lobby-empty h2 { color: var(--text-primary); font-size: 18px; margin-top: 20px; }
+.lobby-footer { display: flex; justify-content: space-between; gap: 16px; padding-top: 32px; color: var(--text-muted); font-size: 12px; }
+.lobby-footer a:hover { color: var(--text-primary); }
+.lobby-notice, .active-room-choice { padding: 18px 22px; background: var(--bg-secondary); border: 1px solid var(--line-light); border-radius: 16px; }
+.active-room-choice { margin: 16px 0; }
+.active-room-choice > p:first-child { margin-top: 0; }
+.room-entry { min-height: 100dvh; padding: 32px 5vw; display: flex; flex-direction: column; }
+.entry-card { width: min(100%, 480px); margin: auto; padding: 36px; border: 1px solid var(--line-light); border-radius: 24px; background: var(--bg-panel); }
+.entry-card h1 { margin: 16px 0 24px; font-size: 30px; }
+.entry-back { display: inline-block; margin-top: 24px; color: var(--text-muted); }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.dialog-actions .primary-button { width: auto; }
+.binding-status { display: flex; flex-direction: column; gap: 8px; padding: 16px 0; }
+.binding-status > span { color: var(--text-muted); font-size: 13px; }
+.qr-image { display: flex; justify-content: center; margin: 18px 0; }
+.qr-image img { border-radius: 14px; max-width: 100%; height: auto; }
+.room-toolbar { position: relative; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0 3.7vw 14px; }
+.room-toolbar > div { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; }
+.room-toolbar strong { font-size: 14px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-toolbar span { color: var(--text-muted); font-size: 12px; }
+.room-toolbar .pill-button { padding: 7px 13px; font-size: 12px; }
+.room-banner { position: relative; z-index: 14; margin: 0 3.7vw; padding: 10px 14px; border: 1px solid var(--line-light); border-radius: 12px; background: var(--bg-panel); color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 1000px) { .room-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lobby-tagline { display: none; } .room-auth-state { display: none; } }
+@media (max-width: 600px) {
+  .room-lobby { padding: 22px 20px; } .lobby-header { gap: 12px; } .lobby-account { gap: 12px; } .lobby-account > .pill-button { padding: 9px 12px; font-size: 12px; }
+  .lobby-intro { align-items: flex-start; flex-direction: column; padding: 45px 0 28px; } .lobby-list-heading input { width: 150px; }
+  .room-grid { grid-template-columns: 1fr; } .lobby-footer { flex-direction: column; } .entry-card { padding: 26px; }
+  .room-toolbar { gap: 8px; padding: 0 20px 12px; } .room-toolbar > div { width: 100%; } .room-toolbar strong { max-width: 200px; }
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-inter), "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; }
@@ -70,6 +131,7 @@ button svg { flex-shrink: 0; }
 .account-menu > span { color: var(--text-muted); font-size: 12px; }
 .account-menu button, .account-menu a { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; margin-top: 20px; color: var(--text-secondary); }
 .track-heading { position: absolute; top: 14.4%; left: 3.8vw; z-index: 1; max-width: min(500px, 42vw); text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+.music-stage .track-heading { position: relative; top: auto; left: auto; margin: 16px 3.8vw 0; }
 .eyebrow { font-size: 10px; letter-spacing: .4em; color: #a69d9f; margin: 0 0 16px; }
 .track-heading h1 { margin: 0; font-size: clamp(23px, 2.1vw, 32px); line-height: 1.3; font-weight: 700; letter-spacing: -.7px; overflow-wrap: anywhere; }
 .track-artist { margin: 6px 0 9px; font-size: 21px; color: #d6ced0; }

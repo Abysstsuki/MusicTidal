@@ -27,6 +27,8 @@ export interface RecommendationState {
 }
 
 export interface ChatMessage {
+  id?: string;
+  userId?: number;
   username: string;
   text: string;
 }
@@ -35,4 +37,5 @@ export interface PlaybackSnapshot {
   song: Song | null;
   url: string;
   startTime: number;
+  playbackRevision?: number;
 }

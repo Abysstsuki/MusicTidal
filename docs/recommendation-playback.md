@@ -1,6 +1,6 @@
 # 心动模式续播
 
-打开「待播」，点击「开启心动模式」。服务端用现有网易云 Cookie 读取账号、红心歌单和红心歌曲列表，通过 `/playmode/intelligence/list` 获取动态推荐。所有人共用同一个推荐队列，沿用现有的播放地址、定时切歌与 WebSocket 同步。打开网页本身不会开启推荐。
+进入房间后，房主完成网易云绑定，在「待播」点击「开启心动模式」。服务端用房主的 Cookie 读取账号、红心歌单和红心歌曲列表，通过 `/playmode/intelligence/list` 获取动态推荐。每个房间拥有独立推荐会话和队列，房间成员同步播放。打开网页或完成绑定本身不会开启推荐。
 
 `user_playlist`、`likelist` 和 `playmode_intelligence_list` 已封装进 `backend/vendor/netease/`，来自原 API 库 4.11.1，无需启动独立 API 服务。红心歌单通过 `specialType: 5` 和所属用户识别，不依赖名称。种子歌曲从红心列表中选择，当前歌曲也是红心歌曲时优先使用它；后续推荐批次轮换红心种子并递增请求次数，返回列表按顺序消费。
 
@@ -12,15 +12,15 @@
 - 「停止续播」移除待播推荐、取消补歌，不中断当前歌曲，也不删除手动点歌。把推荐歌曲置顶会将它转为手动点歌，停止续播后仍保留。
 - 网络请求失败或暂无可播放歌曲时，保留开关，显示提示并等待 30 秒自动重试。账号未登录、登录失效、未找到红心歌单或红心歌单为空时，显示具体原因并关闭推荐，修正登录或收藏歌曲后可以重新开启。正在加载时也可停止；停止前发出的请求不会恢复旧队列或新会话的游标。
 
-推荐基于服务端 Cookie 所属网易云账号的红心歌单，全房间共用，没有新增个人网易云登录。MusicTidal 账号登录不能代替网易云账号登录。启动、停止、动态推荐会话和歌曲队列都存放在内存，重启后需要重新开启。授权支持 `NETEASE_COOKIE` 或原有 `backend/cookie.txt`，详见 [内嵌网易云 API](backend-netease.md)。每次开启重新读取红心来源；连续续播时，在新推荐批次请求前按 5 分钟有效期刷新来源。
+推荐基于房主绑定的网易云账号，只有房主可开启和停止心动模式。MusicTidal 登录不能代替网易云绑定。会话和队列保存在房间内存，重启后房间结束；个人加密绑定保存在数据库。重新绑定、解除绑定或明确失效会终止旧推荐任务并清空待播心动歌曲，当前歌曲继续播放，手动队列保留。游客房间可以手动点歌；全局 Cookie 不再回退使用。详见 [内嵌网易云 API](backend-netease.md) 与 [多房间说明](rooms.md)。每次开启重新读取红心来源；连续续播时，在新推荐批次请求前按 5 分钟有效期刷新来源。
 
 ## 接口与消息
 
 | 接口 | 用途 |
 |---|---|
-| `POST /api/queue/recommendations/start` | 开启心动模式；重复开启共用同一会话和补歌任务 |
-| `POST /api/queue/recommendations/stop` | 停止续播，移除推荐待播 |
-| `GET /api/queue/list` | 返回 `queue` 和 `recommendations` 状态 |
+| `POST /api/rooms/:roomId/queue/recommendations/start` | 房主开启心动模式；重复开启共用同一会话和补歌任务 |
+| `POST /api/rooms/:roomId/queue/recommendations/stop` | 房主停止续播，移除推荐待播 |
+| `GET /api/rooms/:roomId/queue/list` | 成员读取 `queue` 和 `recommendations` 状态 |
 
 推荐开关响应返回 `{ success, recommendations }`。状态字段为 `enabled`、`loading`、`phase`、`queued`、`error`；开启时 `phase` 为 `heart`，停止时为 `null`，`queued` 为队列中尚未播放的推荐歌曲数量。可恢复的失败通过 `recommendations.error` 返回，并保持 `enabled: true`；登录和空歌单问题则返回 `enabled: false` 和具体原因。
 
@@ -32,4 +32,4 @@
 
 启动后端和前端后打开页面，无需单独启动网易云 API 服务。后端代码更新后，需要让后端加载新版本；未启动后端时，按钮会显示连接错误。
 
-`?preview=1` 中的按钮只操作本地演示歌曲，不连接、开启或改变真实房间的推荐队列。
+`/room?preview=1` 中的按钮只操作本地演示歌曲，不连接、开启或改变真实房间的推荐队列。

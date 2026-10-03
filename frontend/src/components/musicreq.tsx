@@ -7,7 +7,6 @@ import CheckRounded from '@mui/icons-material/CheckRounded';
 import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
-import { apiRequest } from '@/lib/api';
 import { previewQueue, previewSong } from '@/lib/stage-preview';
 import type { Song, SongSearchResponse } from '@/types/music';
 import SongCover from './modelItem/SongCover';
@@ -16,7 +15,7 @@ import { formatDuration } from './musicplayer';
 const PAGE_SIZE = 10;
 
 export default function MusicReq({ isVisible }: { isVisible: boolean }) {
-  const { enqueue, isPreview } = useMusicContext();
+  const { enqueue, isPreview, requestRoom } = useMusicContext();
   const [query, setQuery] = useState('');
   const [keyword, setKeyword] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
@@ -43,7 +42,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
         setSongs(candidates.filter(song => (song.name + song.artist).toLowerCase().includes(term.toLowerCase())));
         setPages(1);
       } else {
-        const data = await apiRequest<SongSearchResponse>('/api/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
+        const data = await requestRoom<SongSearchResponse>('/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
         if (!data.success) throw new Error('歌曲暂时无法搜索，请稍后重试');
         if (!controller.signal.aborted) { setSongs(data.data); setPages(Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))); }
       }
