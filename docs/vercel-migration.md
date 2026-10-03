@@ -361,16 +361,14 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:3000   # vercel dev 默认端口
 ## 6. 本地开发
 
 ```bash
-# 终端 1: Netease API
-cd NeteaseCloudMusicApi-master
-npm start                          # 端口 3457
-
-# 终端 2: 后端 (Vercel Serverless 模拟)
+# 网易云模块已内嵌到 backend，无需启动独立 API 服务。
+# 本节其余命令是待实现的 Vercel 迁移方案，当前启动方式见 backend-netease.md。
+# 终端 1: 后端 (Vercel Serverless 模拟)
 cd backend
 npm install @vercel/node vercel @vercel/kv pusher
 vercel dev                         # 端口 3000，自动加载 .env.local
 
-# 终端 3: 前端
+# 终端 2: 前端
 cd frontend
 npm run dev                        # 端口 3001（或自定义）
 ```
@@ -409,7 +407,9 @@ npm run dev                        # 端口 3001（或自定义）
 | `KV_REST_API_TOKEN` | KV REST API Token | Vercel 自动注入 |
 | `DATABASE_URL` | PostgreSQL 连接串 | Vercel → Storage → Postgres |
 | `JWT_SECRET` | JWT 签名密钥 | 自定义 |
-| `NETEASE_CLOUD_API_URL` | 网易云 API 地址 | 本地: localhost:3457 / 线上: 自部署 |
+| `NETEASE_COOKIE` | 网易云授权 Cookie | 环境变量，或使用 backend/cookie.txt |
+| `NETEASE_ANONYMOUS_TOKEN` | 可选游客令牌 | 环境变量，未配置时内存获取 |
+| `NETEASE_REAL_IP` | 可选国内 IP 覆盖 | 沿用项目默认值或显式配置 |
 
 ### 前端 (Cloudflare Pages)
 

@@ -6,7 +6,7 @@ MusicTidal is a web app for multiple users to listen to music together in sync. 
 
 - `frontend/`: Next.js 15 App Router + React 19 UI.
 - `backend/`: Express 5 + TypeScript API server, Prisma user storage, and a WebSocket server.
-- `NeteaseCloudMusicApi-master/`: vendored Netease Cloud Music API service used by the backend for search, lyrics, and playable URLs.
+- `backend/vendor/netease/`: embedded Netease API subset for search, lyrics, playable URLs, account checks, daily recommendations, and personal FM. The ignored sibling `NeteaseCloudMusicApi-master/` is the original source reference and is not needed at runtime.
 - `docs/`: sparse project docs and prior design/process notes.
 
 The main product loop is: user logs in, searches Netease songs, adds songs to a shared queue, the backend advances the in-memory queue, and all connected browsers receive synchronized playback state through WebSocket.
@@ -32,7 +32,7 @@ The main product loop is: user logs in, searches Netease songs, adds songs to a 
 - `backend/src/services/songQueueService.ts`: in-memory queue and current-song timer.
 - `backend/src/services/websocketServer.ts`: WebSocket users, chat history, broadcast, current playback snapshot.
 - `backend/src/services/netease/song.service.ts`: Netease search, song URL, lyric APIs.
-- `backend/src/utils/neteaseHttp.ts`: direct HTTP client for the vendored Netease API, including `cookie.txt` and `realIP`.
+- `backend/src/utils/neteaseHttp.ts`: adapter for the embedded Netease modules, including environment/file credentials, `realIP`, and bounded search/lyric caching.
 - `backend/prisma/schema.prisma`: Prisma schema. Generated client lives in `backend/src/generated/prisma`.
 
 ## Tech Stack
@@ -54,7 +54,7 @@ Backend:
 - `ws` WebSocket server on the same HTTP server as Express
 - Prisma `6.11.0` with PostgreSQL
 - JWT auth with bcrypt password hashing
-- Netease API access via local vendored service and `backend/cookie.txt`
+- Netease API access via embedded modules and `NETEASE_COOKIE` or `backend/cookie.txt`
 
 ## Common Commands
 
@@ -78,17 +78,11 @@ npm install
 npm run dev
 npx tsc --noEmit
 npx prisma generate
-```
-
-Netease API service:
-
-```bash
-cd NeteaseCloudMusicApi-master
-npm install
+npm run build
 npm start
 ```
 
-The Netease service script sets `PORT=3457` on Windows. The backend defaults `NETEASE_CLOUD_API_URL` to `http://localhost:3457` if the env var is absent.
+The backend calls Netease directly through `backend/vendor/netease/`; no separate Netease API service or API-origin variable is needed. See `docs/backend-netease.md` for configuration and deployment details.
 
 ## Environment And Secrets
 
@@ -98,9 +92,11 @@ Backend expects:
 
 - `DATABASE_URL`: PostgreSQL connection string for Prisma.
 - `JWT_SECRET`: signing secret for login tokens.
-- `NETEASE_CLOUD_API_URL`: local/remote Netease API base URL, usually `http://localhost:3457`.
+- `NETEASE_COOKIE`: optional Netease cookie, takes precedence over `backend/cookie.txt`.
+- `NETEASE_ANONYMOUS_TOKEN`: optional guest token, takes precedence over `backend/anonymous_token`; otherwise acquired in memory when needed.
+- `NETEASE_REAL_IP`: optional override of the project's existing domestic IP default.
 - `PORT`: optional backend port, default `3001`.
-- `backend/cookie.txt`: Netease cookie used by `neteaseHttp.ts` and `axiosNetease.ts`.
+- `backend/cookie.txt`: fallback Netease cookie used by the embedded module adapter. `axiosNetease.ts` only re-exports that adapter for compatibility.
 
 Frontend expects:
 
@@ -116,7 +112,7 @@ Existing `.env`, `.env.local`, and `cookie.txt` files may contain real secrets o
 3. Backend routes under `/api` call services:
    - `/api/auth/*` uses Prisma users, bcrypt, JWT.
    - `/api/user/me` verifies JWT and returns profile.
-   - `/api/netease/*` talks to the vendored Netease API service.
+   - `/api/netease/*` calls the embedded Netease modules, which request Netease servers directly.
    - `/api/queue/*` mutates or reads `songQueueService`.
 4. WebSocket clients connect directly to `NEXT_PUBLIC_WS_URL`.
 5. Queue and playback are process memory only. Restarting the backend clears queue, chat history, online users, current song, and timers.
@@ -171,7 +167,7 @@ Keep changes visually consistent with the existing first-screen app layout. Avoi
 
 - Many existing source files contain mojibake in comments and user-facing strings. Preserve it unless the task explicitly asks to fix copy/encoding; broad copy rewrites can create noisy diffs.
 - Several files already have local modifications in the working tree. Do not revert or overwrite unrelated changes.
-- `node_modules/`, `.next/`, generated Prisma files, and vendored `NeteaseCloudMusicApi-master/` should generally not be touched unless the task specifically requires it.
+- `node_modules/`, `.next/`, generated Prisma files, and the original `NeteaseCloudMusicApi-master/` should generally not be touched unless the task specifically requires it. Embedded third-party adaptations live separately in `backend/vendor/netease/` with their license and change notes.
 - In PowerShell, paths containing square brackets, such as `frontend/src/app/api/auth/[action]/route.ts`, need `-LiteralPath`.
 - `rg` may be unavailable or blocked in this sandbox; use `Get-ChildItem` / `Select-String` fallback when needed.
 - The backend has no meaningful test script at the moment (`npm test` exits with an error by design).
@@ -201,7 +197,7 @@ cd backend
 npx prisma generate
 ```
 
-For end-to-end local testing, run the Netease API service, backend, and frontend in separate terminals, then open `http://localhost:3000`.
+For end-to-end local testing, run backend and frontend in separate terminals, then open `http://localhost:3000`.
 
 ## Collaboration Rules For Future Agents
 

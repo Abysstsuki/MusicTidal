@@ -35,7 +35,7 @@ export function normalizeRecommendedSongs(input: unknown): Song[] {
 async function fetchRecommendations(endpoint: string, kind: 'daily' | 'fm'): Promise<Song[]> {
   try {
     const response = await neteaseHttp.get(endpoint, {
-      // The vendored API caches requests; even calls within one millisecond must differ.
+      // Retain unique request markers; the embedded adapter never caches recommendations.
       params: { timestamp: Date.now() + '-' + ++requestSequence },
     });
     const body = response.data;

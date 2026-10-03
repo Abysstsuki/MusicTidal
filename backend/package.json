@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc && node scripts/copy-prisma.cjs",
+    "start": "node dist/server.js",
     "test": "node --test tests/*.test.cjs",
     "dev": "ts-node-dev --respawn src/server.ts"
   },

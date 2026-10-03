@@ -19,6 +19,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -32,6 +33,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,4 +42,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 cookie.txt
+anonymous_token
 /src/generated/prisma
