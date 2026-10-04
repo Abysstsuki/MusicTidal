@@ -15,7 +15,7 @@ test('playlist REST/WS permissions, personal binding, room isolation and snapsho
   await call(root + '/join', 3, 'POST');
   const other = (await call('/rooms', 2, 'POST', { name: 'Other room' })).data.room;
   assert.equal((await call('/user/netease/playlists', 3)).status, 409);
-  assert.equal((await call('/user/netease/playlists/search?keywords=test', 3)).data.items.length, 2);
+  assert.equal((await call('/user/netease/playlists/search?keywords=test', 3)).status, 409);
   assert.equal((await call('/user/netease/playlists/700/tracks?limit=101', 3)).status, 400);
   const qr = (await call('/user/netease/qr', 3, 'POST')).data;
   let bound;
@@ -24,6 +24,8 @@ test('playlist REST/WS permissions, personal binding, room isolation and snapsho
   const personal = await call('/user/netease/playlists?uid=12345', 3);
   assert.equal(personal.status, 200); assert.equal(personal.data.items[0].isLiked, true);
   assert.equal((await call('/user/netease/playlists', 1)).status, 409);
+  assert.equal((await call(root + '/playlists', 3, 'POST', { playlistId: 700 })).status, 409);
+  await api.bind(1);
   const added = (await call(root + '/playlists', 3, 'POST', { playlistId: 700 })).data;
   assert.equal(added.state.entries[0].addedBy.id, 3); assert.equal(added.state.mode, 'regular');
   assert.ok(!JSON.stringify(added).includes('MUSIC_U')); assert.ok(!JSON.stringify(added).includes('trackIds'));

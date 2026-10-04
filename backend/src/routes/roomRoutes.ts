@@ -6,6 +6,7 @@ import { HttpError } from '../utils/httpError';
 import queueRoutes from './queueRoutes';
 import neteaseRoutes from './netease.routes';
 import { roomPlaylistRoutes } from './playlistRoutes';
+import musicRoutes from './musicRoutes';
 
 const router = Router();
 router.get('/', (_req, res) => { res.json({ rooms: roomManager.list() }); });
@@ -29,5 +30,6 @@ router.use('/:roomId', (req: AuthRequest, res, next) => {
 router.get('/:roomId/state', (_req, res) => { res.json(res.locals.room.state()); });
 router.use('/:roomId/queue', queueRoutes);
 router.use('/:roomId/playlists', roomPlaylistRoutes);
-router.use('/:roomId/netease', neteaseRoutes);
+router.use('/:roomId/music', musicRoutes);
+router.use('/:roomId/netease', (_req, res, next) => { res.locals.room.requireProvider('netease'); next(); }, neteaseRoutes);
 export default router;

@@ -22,7 +22,8 @@ test('personal catalogs use member credentials, cache independently and page onl
   const page = { offset: 0, limit: 30 };
   assert.equal((await catalog.list(1, page)).items[0].isLiked, true); await catalog.list(2, page); await catalog.list(1, page);
   assert.equal(calls.length, 2); assert.equal(calls[0].cookie, credential(1).cookie); assert.equal(calls[1].params.uid, '2');
-  await catalog.search(3, 'test', page); assert.equal(calls.at(-1).cookie, ''); assert.equal(calls.at(-1).params.type, 1000);
+  await assert.rejects(catalog.search(3, 'test', page), error => error.status === 409);
+  await catalog.search(1, 'test', page); assert.equal(calls.at(-1).cookie, credential(1).cookie); assert.equal(calls.at(-1).params.type, 1000);
   await assert.rejects(catalog.list(3, page), error => error.status === 409);
   const first = await catalog.tracks(1, 700, page), second = await catalog.tracks(1, 700, { offset: 30, limit: 30 });
   assert.equal(first.items.length, 30); assert.equal(second.items[0].id, 40); assert.equal(second.total, 65);

@@ -4,6 +4,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import routes from './routes';
 import { errorHandler } from './middlewares/errorHandler';
+import { prisma } from './utils/prisma';
 
 const app = express();
 
@@ -19,6 +20,10 @@ app.use('/api', (_req, res, next) => {
 });
 
 // 路由
+app.get('/api/health', async (_req, res) => {
+  try { await prisma.$queryRaw`SELECT 1`; res.json({ status: 'ok' }); }
+  catch { res.status(503).json({ status: 'unavailable' }); }
+});
 app.use('/api', routes);
 
 // 错误处理

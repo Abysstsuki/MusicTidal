@@ -1,5 +1,6 @@
 import { neteaseHttp, type NeteaseClient } from '../../utils/neteaseHttp';
 import type { Song } from '../../types/song';
+import { neteaseSong } from '../music/song';
 
 type NeteaseSong = {
   id?: number;
@@ -31,6 +32,7 @@ export function normalizeRecommendedSongs(input: unknown): Song[] {
     const duration = raw.dt ?? raw.duration ?? 0;
     const cover = raw.al?.picUrl || raw.album?.picUrl;
     return [{
+      ...neteaseSong(raw),
       id: raw.id!, name: raw.name.trim(),
       artist: Array.isArray(artists) ? artists.map(artist => artist?.name).filter(name => typeof name === 'string').join(', ') : '',
       prcUrl: typeof cover === 'string' ? cover : '',

@@ -7,6 +7,11 @@ import { getSongPlayInfo } from './netease/song.service';
 import { HeartModeSession } from './netease/recommendation.service';
 import { SongQueueService } from './songQueueService';
 import { playlistCatalog } from './netease/playlist.service';
+import { qqmusicPlaylistCatalog } from './qqmusic/playlist.service';
+import { qqmusicBindings } from './qqmusic/binding.service';
+import { createQqMusicClient, QqMusicClient } from '../utils/qqmusicHttp';
+import type { MusicProvider } from '../types/song';
+import { providerName } from './music/song';
 
 export const RECONNECT_GRACE_MS = 180_000;
 export type RoomUser = { id: number; username: string };
@@ -14,6 +19,7 @@ export type RoomEvent = { type: string; roomId: string; revision: number; payloa
 export interface RoomConnection { send(event: RoomEvent): void; close(): void }
 type Member = RoomUser & { connections: Set<RoomConnection>; expiresAt: number | null; timer: ReturnType<typeof setTimeout> | null };
 type Credential = { cookie: string; encrypted: string | null; binding: BindingStatus };
+type QqDependencies = { credentials: (id: number) => Promise<Credential>; invalidate: (id: number, encrypted: string) => Promise<void>; clientFactory: typeof createQqMusicClient };
 
 export class Room {
   readonly queue: SongQueueService;
@@ -23,6 +29,10 @@ export class Room {
   readonly messages: { id: string; userId: number; username: string; text: string }[] = [];
   client: NeteaseClient = createNeteaseClient('');
   binding: BindingStatus = { status: 'unbound', profile: null, boundAt: null };
+  qqmusicBinding: BindingStatus = { status: 'unbound', profile: null, boundAt: null };
+  qqmusicClient: QqMusicClient = createQqMusicClient('');
+  qqmusicVersion = 0;
+  qqmusicAuthorizationTask: Promise<void> | null = null;
   revision = 0;
   closed = false;
   credentialVersion = 0;
@@ -31,15 +41,25 @@ export class Room {
     this.host = { id: host.id, username: host.username };
     this.inviteToken = passwordHash ? randomBytes(32).toString('hex') : null;
     this.queue = new SongQueueService({
-      getPlayInfo: async id => {
-        await this.authorizationTask;
+      canPlaySong: song => this.bindingFor(song.provider || 'netease').status === 'bound',
+      getPlayInfo: async (id, song) => {
+        const provider = song?.provider || 'netease';
+        await (provider === 'netease' ? this.authorizationTask : this.qqmusicAuthorizationTask);
+        this.requireProvider(provider);
         if (this.closed) throw new HttpError(404, '房间已结束', 'ROOM_CLOSED');
-        return getSongPlayInfo(id, this.client);
+        return provider === 'qqmusic' ? this.qqmusicClient.play(song!) : getSongPlayInfo(id, this.client);
       },
       createHeartSession: initial => new HeartModeSession(initial, this.client),
+      createRecommendationSession: (provider, initial) => {
+        if (provider === 'netease') return new HeartModeSession(initial, this.client);
+        const client = this.qqmusicClient; let previous: number[] = [];
+        return { nextSongs: async () => { const songs = await client.roam(previous); previous = songs.map(song => song.id); return songs; } };
+      },
       getPlaylistSong: async candidate => {
-        await playlistCatalog.index(candidate.userId, candidate.playlistId);
-        return (await playlistCatalog.songs(candidate.userId, [candidate.songId]))[0];
+        const catalog = candidate.provider === 'qqmusic' ? qqmusicPlaylistCatalog : playlistCatalog;
+        this.requireProvider(candidate.provider || 'netease');
+        await catalog.index(candidate.userId, candidate.playlistId);
+        return (await catalog.songs(candidate.userId, [candidate.songId]))[0];
       },
       emit: event => this.broadcast(event.type, event.payload),
     });
@@ -48,12 +68,17 @@ export class Room {
     const song = this.queue.getCurrentSong()?.song;
     return { id: this.id, name: this.name, host: this.host, locked: Boolean(this.passwordHash),
       onlineCount: this.onlineMembers().length,
-      currentSong: song ? { id: song.id, name: song.name, artist: song.artist, prcUrl: song.prcUrl } : null,
+      currentSong: song ? { id: song.id, provider: song.provider || 'netease', access: song.access, trial: song.trial, name: song.name, artist: song.artist, prcUrl: song.prcUrl } : null,
       hostDisconnectedUntil: this.members.get(this.host.id)?.expiresAt || null,
       hostGracePeriodMs: RECONNECT_GRACE_MS };
   }
   onlineMembers() { return [...this.members.values()].filter(member => member.connections.size > 0).map(member => ({ id: member.id, username: member.username, isHost: member.id === this.host.id })); }
-  info() { return { ...this.summary(), binding: this.binding, inviteToken: this.inviteToken }; }
+  bindingFor(provider: MusicProvider) { return provider === 'netease' ? this.binding : this.qqmusicBinding; }
+  requireProvider(provider: MusicProvider) {
+    if (this.bindingFor(provider).status !== 'bound') throw new HttpError(409, `房主尚未有效绑定${providerName(provider)}`, 'MUSIC_BINDING_REQUIRED');
+  }
+  info() { return { ...this.summary(), binding: this.binding, bindings: { netease: this.binding, qqmusic: this.qqmusicBinding },
+    enabledProviders: (['netease', 'qqmusic'] as MusicProvider[]).filter(provider => this.bindingFor(provider).status === 'bound'), inviteToken: this.inviteToken }; }
   acceptsInvite(token: unknown) {
     return Boolean(this.inviteToken && typeof token === 'string' && /^[a-f0-9]{64}$/.test(token)
       && timingSafeEqual(Buffer.from(token, 'hex'), Buffer.from(this.inviteToken, 'hex')));
@@ -79,7 +104,8 @@ export class RoomManager {
   private activeByUser = new Map<number, string>();
   constructor(private readonly credentials: (userId: number) => Promise<Credential> = id => neteaseBindings.credential(id),
     private readonly invalidate: (userId: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted),
-    private readonly clientFactory = createNeteaseClient) {}
+    private readonly clientFactory = createNeteaseClient,
+    private readonly qq?: QqDependencies) {}
 
   list() {
     return [...this.rooms.values()].map(room => {
@@ -113,10 +139,12 @@ export class RoomManager {
     if (password !== undefined && (typeof password !== 'string' || Buffer.byteLength(password) > 72)) throw new HttpError(400, '密码过长');
     const hash = password ? await bcrypt.hash(password as string, 10) : null;
     const credential = await this.credentials(user.id);
+    const qqCredential = this.qq ? await this.qq.credentials(user.id) : null;
     this.ensureAvailable(user.id);
     const room = new Room(randomUUID(), name.trim(), user, hash);
     this.rooms.set(room.id, room);
     this.applyCredential(room, credential);
+    if (qqCredential) this.applyQqCredential(room, qqCredential);
     this.addMember(room, user);
     return room;
   }
@@ -187,6 +215,8 @@ export class RoomManager {
     if (!room || room.closed) return;
     room.broadcast('ROOM_CLOSED', { reason }); room.closed = true;
     room.queue.dispose(); ++room.credentialVersion;
+    room.client.dispose?.();
+    ++room.qqmusicVersion; room.qqmusicClient.dispose();
     this.rooms.delete(id);
     for (const member of room.members.values()) {
       if (member.timer) clearTimeout(member.timer);
@@ -205,39 +235,65 @@ export class RoomManager {
   }
   private applyCredential(room: Room, credential: Credential) {
     const version = ++room.credentialVersion;
+    room.client.dispose?.(true);
     room.binding = credential.binding;
     room.client = this.clientFactory(credential.cookie, () => {
       if (room.closed || version !== room.credentialVersion || !credential.encrypted) return;
       ++room.credentialVersion;
-      room.binding = { ...room.binding, status: 'expired' }; room.client = this.clientFactory('');
-      room.queue.resetAuthorization(); room.changed();
+      room.binding = { ...room.binding, status: 'expired' }; room.client.dispose?.(true); room.client = this.clientFactory('');
+      room.queue.resetAuthorization('netease'); room.changed();
       void this.invalidate(room.host.id, credential.encrypted).catch(() => console.warn('Unable to persist Netease expiry status.'));
     });
-    room.queue.resetAuthorization();
+    room.queue.resetAuthorization('netease');
     room.changed();
   }
-  async refreshAuthorization(userId: number) {
-    for (const room of this.rooms.values()) room.queue.invalidatePlaylistSource(userId);
+  async refreshAuthorization(userId: number, provider: MusicProvider = 'netease') {
+    for (const room of this.rooms.values()) room.queue.invalidatePlaylistSource(userId, provider);
     // A host may bind again after leaving; retained rooms must also revoke old credentials.
     await Promise.all([...this.rooms.values()].filter(room => room.host.id === userId)
-      .map(room => this.refreshRoomAuthorization(room, userId)));
+      .map(room => provider === 'netease' ? this.refreshRoomAuthorization(room, userId) : this.refreshQqAuthorization(room, userId)));
   }
   private async refreshRoomAuthorization(room: Room, userId: number) {
     const version = ++room.credentialVersion;
     // Revoke the previous context immediately, before an asynchronous credential read.
-    room.client = this.clientFactory('');
+    room.client.dispose?.(true); room.client = this.clientFactory('');
     room.binding = { status: 'unbound', profile: null, boundAt: null };
     const task = this.credentials(userId).then(credential => {
       if (!room.closed && version === room.credentialVersion) this.applyCredential(room, credential);
     }).finally(() => { if (room.authorizationTask === task) room.authorizationTask = null; });
     room.authorizationTask = task;
-    room.queue.resetAuthorization(); room.changed();
+    room.queue.resetAuthorization('netease'); room.changed();
     await task;
+  }
+  private applyQqCredential(room: Room, credential: Credential) {
+    const version = ++room.qqmusicVersion;
+    room.qqmusicClient.dispose(); room.qqmusicBinding = credential.binding;
+    room.qqmusicClient = (this.qq?.clientFactory || createQqMusicClient)(credential.cookie, () => {
+      if (room.closed || version !== room.qqmusicVersion || !credential.encrypted) return;
+      ++room.qqmusicVersion; room.qqmusicBinding = { ...room.qqmusicBinding, status: 'expired' };
+      room.qqmusicClient.dispose(); room.queue.resetAuthorization('qqmusic'); room.changed();
+      void this.qq?.invalidate(room.host.id, credential.encrypted).catch(() => console.warn('Unable to persist QQ binding expiry.'));
+    });
+    room.queue.resetAuthorization('qqmusic'); room.changed();
+  }
+  private async refreshQqAuthorization(room: Room, userId: number) {
+    if (!this.qq) return;
+    const version = ++room.qqmusicVersion;
+    room.qqmusicClient.dispose(); room.qqmusicBinding = { status: 'unbound', profile: null, boundAt: null };
+    const task = this.qq.credentials(userId).then(credential => {
+      if (!room.closed && version === room.qqmusicVersion) this.applyQqCredential(room, credential);
+    }).finally(() => { if (room.qqmusicAuthorizationTask === task) room.qqmusicAuthorizationTask = null; });
+    room.qqmusicAuthorizationTask = task;
+    room.queue.resetAuthorization('qqmusic'); room.changed(); await task;
   }
   dispose() { for (const id of [...this.rooms.keys()]) this.destroy(id, '服务已停止'); }
 }
 
-export const roomManager = new RoomManager();
+export const roomManager = new RoomManager(undefined, undefined, undefined, { credentials: id => qqmusicBindings.credential(id),
+  invalidate: (id, encrypted) => qqmusicBindings.markInvalid(id, encrypted), clientFactory: createQqMusicClient });
 neteaseBindings.on('changed', (userId: number) => {
   void roomManager.refreshAuthorization(userId).catch(() => console.warn('Unable to refresh room authorization.'));
+});
+qqmusicBindings.on('changed', (userId: number) => {
+  void roomManager.refreshAuthorization(userId, 'qqmusic').catch(() => console.warn('Unable to refresh QQ room authorization.'));
 });

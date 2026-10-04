@@ -3,7 +3,8 @@ import { neteaseBindings } from './binding.service';
 import { createNeteaseClient, NeteaseApiError, type NeteaseClient } from '../../utils/neteaseHttp';
 import { HttpError } from '../../utils/httpError';
 import type { PlaylistIndex, PlaylistSummary } from '../../types/playlist';
-import type { Song } from '../../types/song';
+import type { Song, MusicProvider } from '../../types/song';
+import { neteaseSong, providerName } from '../music/song';
 
 export function positiveId(value: unknown): number {
   const id = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -17,7 +18,7 @@ export function pagination(query: { offset?: unknown; limit?: unknown }) {
   return { offset, limit };
 }
 function summary(raw: any, uid = ''): PlaylistSummary {
-  return { id: positiveId(raw.id), name: String(raw.name || '未命名歌单'), coverUrl: String(raw.coverImgUrl || ''),
+  return { provider: raw.provider || 'netease', id: positiveId(raw.id), name: String(raw.name || '未命名歌单'), coverUrl: String(raw.coverImgUrl || ''),
     creator: String(raw.creator?.nickname || ''), trackCount: Number(raw.trackCount) || 0,
     isLiked: Number(raw.specialType) === 5 && String(raw.creator?.userId || raw.userId) === uid };
 }
@@ -25,53 +26,61 @@ type Credential = Awaited<ReturnType<typeof neteaseBindings.credential>>;
 export class PlaylistCatalog {
   private cache = new Map<string, { userId: number; expires: number; value: unknown }>();
   private versions = new Map<number, number>();
+  private clients = new Map<number, Set<NeteaseClient>>();
   constructor(private readonly credentials: (id: number) => Promise<Credential> = id => neteaseBindings.credential(id),
     private readonly clientFactory: (cookie: string) => NeteaseClient = createNeteaseClient,
-    private readonly invalidate: (id: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted)) {}
+    private readonly invalidate: (id: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted),
+    private readonly provider: MusicProvider = 'netease') {}
   invalidateUser(userId: number) {
     this.versions.set(userId, (this.versions.get(userId) || 0) + 1);
+    for (const client of this.clients.get(userId) || []) client.dispose?.(true);
+    this.clients.delete(userId);
     for (const [key, item] of this.cache) if (item.userId === userId) this.cache.delete(key);
   }
   private async context(userId: number) {
     const version = this.versions.get(userId) || 0;
     const credential = await this.credentials(userId);
-    if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, '网易云绑定已变化，请重新打开歌单', 'NETEASE_BINDING_CHANGED');
+    if (credential.binding.status !== 'bound') throw new HttpError(409, `请先绑定有效的${providerName(this.provider)}账号`, `${this.provider.toUpperCase()}_BINDING_REQUIRED`);
+    if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重新打开歌单`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
     const identity = createHash('sha256').update(credential.cookie).digest('hex');
     const client = this.clientFactory(credential.cookie);
+    const clients = this.clients.get(userId) || new Set<NeteaseClient>(); clients.add(client); this.clients.set(userId, clients);
     const get = async (endpoint: string, params: Record<string, string | number>) => {
       try {
         const response = await client.get(endpoint, { params });
-        if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, '网易云绑定已变化，请重新打开歌单', 'NETEASE_BINDING_CHANGED');
+        if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重新打开歌单`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
         if (response.data?.code !== 200) throw new HttpError(502, '歌单暂时无法读取，请稍后重试', 'PLAYLIST_UNAVAILABLE');
         return response.data;
       } catch (error) {
-        if (error instanceof NeteaseApiError && (error.code === 301 || error.code === 401)) {
+        if ((error instanceof NeteaseApiError && (error.code === 301 || error.code === 401)) || (error instanceof HttpError && error.code === 'QQMUSIC_BINDING_EXPIRED')) {
           if (credential.encrypted) await this.invalidate(userId, credential.encrypted);
           this.invalidateUser(userId);
-          throw new HttpError(409, '网易云授权已过期，请重新绑定', 'NETEASE_BINDING_EXPIRED');
+          throw new HttpError(409, `${providerName(this.provider)}授权已过期，请重新绑定`, `${this.provider.toUpperCase()}_BINDING_EXPIRED`);
         }
         if (error instanceof HttpError) throw error;
         throw new HttpError(502, '歌单暂时无法读取，请稍后重试', 'PLAYLIST_UNAVAILABLE');
       }
     };
     const cached = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
-      const cacheKey = `${userId}:${version}:${identity}:${key}`;
-      const found = this.cache.get(cacheKey);
-      if (found && found.expires > Date.now()) return found.value as T;
-      this.cache.delete(cacheKey);
-      const value = await load();
-      if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, '网易云绑定已变化，请重试', 'NETEASE_BINDING_CHANGED');
-      if (this.cache.size >= 100) this.cache.delete(this.cache.keys().next().value!);
-      this.cache.set(cacheKey, { userId, expires: Date.now() + 120000, value });
-      return value;
+      try {
+        const cacheKey = `${userId}:${version}:${identity}:${key}`;
+        const found = this.cache.get(cacheKey);
+        if (found && found.expires > Date.now()) return found.value as T;
+        this.cache.delete(cacheKey);
+        const value = await load();
+        if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重试`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
+        if (this.cache.size >= 100) this.cache.delete(this.cache.keys().next().value!);
+        this.cache.set(cacheKey, { userId, expires: Date.now() + 120000, value });
+        return value;
+      } finally { clients.delete(client); if (!clients.size && this.clients.get(userId) === clients) this.clients.delete(userId); client.dispose?.(); }
     };
     return { credential, get, cached };
   }
   async list(userId: number, page: { offset: number; limit: number }) {
     const ctx = await this.context(userId);
-    if (ctx.credential.binding.status !== 'bound' || !ctx.credential.binding.profile) throw new HttpError(409, '请先绑定网易云账号', 'NETEASE_BINDING_REQUIRED');
-    const uid = ctx.credential.binding.profile.uid;
     return ctx.cached(`list:${page.offset}:${page.limit}`, async () => {
+      if (ctx.credential.binding.status !== 'bound' || !ctx.credential.binding.profile) throw new HttpError(409, `请先绑定${providerName(this.provider)}账号`, `${this.provider.toUpperCase()}_BINDING_REQUIRED`);
+      const uid = ctx.credential.binding.profile.uid;
       const data = await ctx.get('/playlist/user', { uid, ...page });
       if (!Array.isArray(data.playlist)) throw new HttpError(502, '个人歌单暂不可用');
       const items = data.playlist.map((raw: any) => summary(raw, uid)).sort((a: PlaylistSummary, b: PlaylistSummary) => Number(b.isLiked) - Number(a.isLiked));
@@ -100,16 +109,14 @@ export class PlaylistCatalog {
     });
   }
   async songs(userId: number, ids: number[]): Promise<Song[]> {
-    const ctx = await this.context(userId);
     if (!ids.length) return [];
     if (ids.length > 100) throw new HttpError(400, '每次最多读取 100 首歌曲');
+    const ctx = await this.context(userId);
     return ctx.cached(`songs:${ids.join(',')}`, async () => {
       const data = await ctx.get('/song/detail', { ids: ids.join(',') });
       if (!Array.isArray(data.songs)) throw new HttpError(502, '歌曲详情暂不可用');
-      const songs = new Map<number, Song>(data.songs.map((raw: any) => [Number(raw.id), {
-        id: Number(raw.id), name: String(raw.name || ''), artist: (raw.ar || []).map((artist: any) => artist.name).join(', '),
-        prcUrl: String(raw.al?.picUrl || ''), duration: Number(raw.dt) || 0,
-      }]));
+      const privileges = new Map((data.privileges || []).map((raw: any) => [Number(raw.id), raw]));
+      const songs = new Map<number, Song>(data.songs.map((raw: any) => [Number(raw.id), raw.normalized ? raw : neteaseSong(raw, privileges.get(Number(raw.id)))]));
       return ids.flatMap(id => songs.has(id) ? [songs.get(id)!] : []);
     });
   }

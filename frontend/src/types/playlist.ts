@@ -1,5 +1,6 @@
 export type PlaybackMode = 'regular' | 'playlist';
 export interface PlaylistSummary {
+  provider?: import('./music').MusicProvider;
   id: number; name: string; coverUrl: string; creator: string; trackCount: number; isLiked: boolean;
 }
 export interface PlaylistEntry extends PlaylistSummary {

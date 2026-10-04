@@ -126,15 +126,15 @@ export default function ListeningStage() {
             <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
               <MusicNoteRounded fontSize="small" /><span>点歌</span>
             </button>
-            <button className="pill-button request-button" aria-label="歌单" title="网易云歌单" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
+            <button className="pill-button request-button" aria-label="歌单" title="音乐歌单" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
             <UserInfo />
           </div>
         </header>
         <div className="room-toolbar">
           <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
-          <span className="room-auth-state">{room?.binding.status === 'bound' ? '网易云 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '网易云授权已过期' : '游客播放授权'}</span>
+          <span className="room-auth-state">{room?.enabledProviders?.length ? '房主授权 · ' + room.enabledProviders.map(provider => provider === 'qqmusic' ? 'QQ 音乐' : '网易云').join(' / ') : '房主尚未绑定音乐账号'}</span>
           <button className="pill-button" onClick={() => void invite()}>邀请</button>
-          <button className="pill-button" onClick={() => setShowBinding(true)}>我的网易云</button>
+          <button className="pill-button" onClick={() => setShowBinding(true)}>音乐账号</button>
           <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
         </div>
       </div>
@@ -158,9 +158,9 @@ export default function ListeningStage() {
       </nav>
 
       {panel && (
-        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'playlist' ? '网易云歌单' : panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
+        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'playlist' ? '音乐歌单' : panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
           <div className="popover-heading">
-            <h2>{panel === 'playlist' ? <><QueueMusicRounded />网易云歌单</> : panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
+            <h2>{panel === 'playlist' ? <><QueueMusicRounded />音乐歌单</> : panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
             <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
           </div>
           {panel === 'chat' && <ChatBox />}

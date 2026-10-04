@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { quietRhythm, type RhythmReader } from '@/lib/audio-rhythm';
 import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song } from '@/types/music';
+import { providerName } from '@/types/music';
 import type { RoomInfo, RoomState } from '@/types/room';
 import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
 import { useAuth } from './AuthContext';
@@ -22,7 +23,7 @@ interface MusicContextType {
   setCurrentSong: (song: Song | null) => void; setCurrentPosition: (position: number) => void; setIsPlaying: (playing: boolean) => void;
   syncPlayback: () => Promise<void>; skipNext: () => Promise<void>; enqueue: (song: Song) => Promise<void>;
   moveToTop: (instanceId: number) => Promise<void>; removeFromQueue: (instanceId: number) => Promise<void>;
-  startRecommendations: () => Promise<void>; stopRecommendations: () => Promise<void>; sendChat: (text: string) => void;
+  startRecommendations: (provider?: import('@/types/music').MusicProvider) => Promise<void>; stopRecommendations: () => Promise<void>; sendChat: (text: string) => void;
   login: (username: string, token: string) => void; leaveRoom: () => Promise<void>;
   requestRoom: <T>(path: string, options?: RequestInit) => Promise<T>;
 }
@@ -67,7 +68,8 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const [messages, setMessages] = useState<ChatMessage[]>(initialState.messages || []);
   const [onlineUsers, setOnlineUsers] = useState<string[]>(initialState.members.map(member => member.username) || []);
   useToastMessage(recommendations.error, { id: 'heart-error-' + roomId, tone: 'error' });
-  useToastMessage(room?.binding.status === 'expired' ? '房主网易云授权已过期，请重新扫码绑定；当前使用游客授权' : '', { id: 'room-authorization-' + roomId, tone: 'warning', duration: 6000 });
+  const expiredProviders = (['netease','qqmusic'] as const).filter(provider => (room?.bindings?.[provider] || (provider === 'netease' ? room?.binding : undefined))?.status === 'expired');
+  useToastMessage(expiredProviders.length ? '房主' + expiredProviders.map(providerName).join('、') + '授权已过期，请重新绑定；对应待播歌曲暂时略过' : '', { id: 'room-authorization-' + roomId, tone: 'warning', duration: 6000 });
   useToastMessage(connection === 'reconnecting' || connection === 'offline' ? '连接已断开，正在尝试重新连接' : '', { id: 'room-connection-' + roomId, tone: 'warning', duration: null });
   const previousConnection = useRef(connection);
   useEffect(() => {
@@ -150,6 +152,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
           if (data.type === 'PLAY_SONG') applyPlayback(data.payload);
           else if (data.type === 'QUEUE_UPDATED') setQueue(data.payload);
           else if (data.type === 'RECOMMENDATIONS_UPDATED') setRecommendations(data.payload);
+          else if (data.type === 'PLAYBACK_NOTICE') showToast(data.payload.message, { tone: 'warning' });
           else if (data.type === 'PLAYLIST_STATE_UPDATED') setPlaylists(data.payload);
           else if (data.type === 'ROOM_UPDATED') setRoom(data.payload);
           else if (data.type === 'update') setOnlineUsers(data.payload.map((member: { username: string }) => member.username));
@@ -186,8 +189,8 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const skipNext = async () => {
     await mutateQueue('skipNext', { playbackRevision: serverPlaybackRevision.current });
   };
-  const setRecommendationMode = async (enabled: boolean) => {
-    await mutateQueue('recommendations/' + (enabled ? 'start' : 'stop'));
+  const setRecommendationMode = async (enabled: boolean, provider: import('@/types/music').MusicProvider = 'netease') => {
+    await mutateQueue('recommendations/' + (enabled ? 'start' : 'stop'), { provider });
   };
   const sendChat = (text: string) => {
     if (!user) throw new Error('请先登录');
@@ -201,5 +204,5 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     connection, queue, recommendations, playlists, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id,
     playlistAction, setPlaybackMode: mode => mutateQueue('mode', { mode }),
     setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue,
-    startRecommendations: () => setRecommendationMode(true), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
+    startRecommendations: provider => setRecommendationMode(true, provider), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
 }

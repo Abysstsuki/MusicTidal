@@ -5,8 +5,6 @@ import VerticalAlignTopRounded from '@mui/icons-material/VerticalAlignTopRounded
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import QueueMusicRounded from '@mui/icons-material/QueueMusicRounded';
 import FavoriteRounded from '@mui/icons-material/FavoriteRounded';
-import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
-import StopRounded from '@mui/icons-material/StopRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
 import { useToast } from '@/contexts/ToastContext';
 import SongCover from './modelItem/SongCover';
@@ -15,6 +13,8 @@ import styles from './musicqueue.module.css';
 import PlaylistBrowser from './PlaylistBrowser';
 import playlistStyles from './playlist.module.css';
 import type { PlaybackMode } from '@/types/playlist';
+import type { MusicProvider } from '@/types/music';
+import SongBadges from './SongBadges';
 
 export default function MusicQueue() {
   const { playlists, isHost, setPlaybackMode, queue } = useMusicContext();
@@ -52,42 +52,42 @@ function RegularQueue() {
     catch (err) { if ((err as Error).name !== 'AbortError') showToast((err as Error).message, { tone: 'error' }); }
     finally { setPending(null); }
   };
-  const toggleRecommendations = async () => {
+  const toggleRecommendations = async (provider: MusicProvider | 'off') => {
     const version = ++modeActionVersion.current;
-    const action = recommendations.enabled ? 'stop' : 'start';
+    const action = provider === 'off' ? 'stop' : 'start';
     setModePending(action);
     try {
-      await (action === 'start' ? startRecommendations() : stopRecommendations());
-      if (version === modeActionVersion.current) showToast(action === 'start' ? '已开启心动模式' : '已停止心动续播', { tone: 'success' });
+      await (provider === 'off' ? stopRecommendations() : startRecommendations(provider));
+      if (version === modeActionVersion.current) showToast(provider === 'off' ? '已关闭推荐' : provider === 'qqmusic' ? '已开启 QQ 漫游' : '已开启网易云心动', { tone: 'success' });
     }
     catch (err) { if (version === modeActionVersion.current && (err as Error).name !== 'AbortError') showToast((err as Error).message, { id: 'heart-error-' + room?.id, tone: 'error' }); }
     finally { if (version === modeActionVersion.current) setModePending(null); }
   };
-  const recommendationStatus = recommendations.loading
-    ? '正在获取心动推荐…'
-    : recommendations.enabled ? recommendations.paused ? '心动模式 · 已暂停' : '心动模式 · 续播中' : '心动模式';
+  const label = recommendations.provider === 'qqmusic' ? 'QQ 漫游' : '网易云心动';
+  const recommendationStatus = recommendations.loading ? '正在获取推荐…'
+    : recommendations.enabled ? label + (recommendations.paused ? ' · 已暂停' : ' · 续播中') : '推荐续播';
   return <div className={styles.content + ' ' + playlistStyles.regular}>
     <div className={styles.card + (recommendations.enabled ? ' ' + styles.enabled : '')}>
       <div className={styles.heading}>
         <FavoriteRounded />
         <strong role="status">{recommendationStatus}</strong>
-        <button className={styles.toggle} onClick={() => void toggleRecommendations()}
-          disabled={!isHost || (room?.binding.status !== 'bound' && !recommendations.enabled) || modePending === 'stop' || (!recommendations.enabled && modePending === 'start')}
-          aria-label={recommendations.enabled ? '停止续播' : '开启心动模式'}>
-          {recommendations.enabled ? <StopRounded /> : <PlayArrowRounded />}
-          {recommendations.enabled ? '停止续播' : modePending === 'start' ? '加载中…' : '开启心动模式'}
-        </button>
+        <select className={styles.toggle} aria-label="推荐来源" value={recommendations.enabled ? recommendations.provider || 'netease' : 'off'}
+          disabled={!isHost || modePending !== null} onChange={event => void toggleRecommendations(event.target.value as MusicProvider | 'off')}>
+          <option value="off">关闭</option>
+          <option value="netease" disabled={room?.binding.status !== 'bound'}>网易云心动</option>
+          <option value="qqmusic" disabled={room?.bindings?.qqmusic.status !== 'bound'}>QQ 漫游</option>
+        </select>
       </div>
-      <p>{recommendations.enabled ? '手动点歌优先；停止后，当前歌曲继续播完。' : '根据红心歌单推荐歌曲，手动点歌优先。'}</p>
-      <p>{room?.binding.status === 'bound' ? '网易云授权 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '房主网易云授权已过期，当前使用游客授权' : '当前使用游客授权'}</p>
-      <span>{!isHost ? '由房主控制心动模式 · 所有人同步收听' : room?.binding.status !== 'bound' ? '先绑定网易云账号，即可开启心动模式' : '使用房主网易云账号的红心歌单 · 所有人同步收听'}</span>
+      <p>手动点歌优先；切换来源后，当前歌曲继续播完。</p>
+      <span>{isHost ? '选择一个已绑定平台提供推荐；歌单模式下暂停补充。' : '由房主选择推荐来源 · 所有人同步收听'}</span>
+      {recommendations.error && <p className="inline-error" role="status">{recommendations.error}</p>}
     </div>
     <div className="song-list">
       {!queue.length && <div className="panel-empty"><QueueMusicRounded /><p>{recommendations.enabled ? '正在补充心动推荐' : '暂无待播歌曲'}</p><span>{recommendations.enabled ? '点歌后会优先播放' : '可以点歌或开启心动模式'}</span></div>}
       {queue.map((song, index) => <div className="song-row" key={song.instanceId}>
         <span className="song-index">{String(index + 1).padStart(2, '0')}</span>
         <SongCover src={song.prcUrl} />
-        <div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}{song.source === 'heart' ? <small className={styles.source}>心动</small> : null}</span></div>
+        <div className="song-row-info"><div className="song-title"><strong title={song.name}>{song.name}</strong><SongBadges song={song} /></div><span>{song.artist} · {formatDuration(song.duration)}{song.source === 'heart' ? <small className={styles.source}>{song.provider === 'qqmusic' ? '漫游' : '心动'}</small> : null}</span></div>
         <div className="song-row-actions">
           <button className="icon-button" onClick={() => void perform(song.instanceId, () => moveToTop(song.instanceId), '已移到队首 · ' + song.name)} disabled={pending !== null || index === 0} title="移到队首" aria-label={'置顶 ' + song.name}><VerticalAlignTopRounded fontSize="small" /></button>
           <button className="icon-button" onClick={() => void perform(song.instanceId, () => removeFromQueue(song.instanceId), '已移出队列 · ' + song.name)} disabled={pending !== null} title="移出队列" aria-label={'移除 ' + song.name}><CloseRounded fontSize="small" /></button>

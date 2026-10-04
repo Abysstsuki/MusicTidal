@@ -1,0 +1,9 @@
+BEGIN;
+
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "qqmusicCookieEncrypted" TEXT,
+  ADD COLUMN IF NOT EXISTS "qqmusicProfile" JSONB,
+  ADD COLUMN IF NOT EXISTS "qqmusicBoundAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "qqmusicInvalidAt" TIMESTAMP(3);
+
+COMMIT;

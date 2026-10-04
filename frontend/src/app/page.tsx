@@ -92,7 +92,7 @@ export default function Home() {
   };
   const visible = rooms.filter(room => (room.name + room.host.username).toLowerCase().includes(filter.toLowerCase()));
   return <main className="room-lobby">
-    <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">多人同步听歌</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}<UserInfo /></div></header>
+    <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">多人同步听歌</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>音乐账号</button>}<UserInfo /></div></header>
     <section className="lobby-intro"><div><p className="eyebrow">ROOM LOBBY</p><h1>房间大厅</h1><p>选择房间加入，或创建新的房间。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
     {auth.error && <button className="pill-button" onClick={auth.retry}>重试登录状态</button>}
     {active && !action && <ActiveRoomChoice room={active} onLeft={() => { setActive(null); void refresh(); }} />}

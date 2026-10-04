@@ -1,4 +1,5 @@
 'use client';
+import SongBadges from './SongBadges';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import PauseRounded from '@mui/icons-material/PauseRounded';
@@ -79,7 +80,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     // Restore before the first play, including replacement audio elements after a CORS fallback.
     if (node) node.volume = volumePreferenceRef.current.volume / 100;
   }, [audioRef]);
-  const loadedPlayback = useRef<{ songId: number; url: string; startTime: number; cors: boolean } | null>(null);
+  const loadedPlayback = useRef<{ songId: string; url: string; startTime: number; cors: boolean } | null>(null);
   const playRequest = useRef(0);
   const pausedByUser = useRef(false);
   const autoplayBlocked = useRef(false);
@@ -89,15 +90,16 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
   useToastMessage(showPlayPrompt ? '自动播放受限，点击页面或播放按钮开始播放' : '', { tone: 'info', duration: null });
   const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const songId = currentSong?.id;
+  const songId = currentSong ? (currentSong.provider || 'netease') + ':' + currentSong.id : undefined;
+  const audioOffset = currentSong?.audioOffset || 0;
   const songDuration = currentSong?.duration || 0;
 
   const alignPlayback = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || audio.readyState < HTMLMediaElement.HAVE_METADATA) return;
-    audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, songDuration / 1000));
-    setCurrentPosition(audio.currentTime * 1000);
-  }, [audioRef, startTime, songDuration, setCurrentPosition]);
+    audio.currentTime = Math.max(0, Math.min((Date.now() - startTime) / 1000, songDuration / 1000) + audioOffset / 1000);
+    setCurrentPosition(Math.max(0, audio.currentTime * 1000 - audioOffset));
+  }, [audioRef, startTime, songDuration, audioOffset, setCurrentPosition]);
 
   const tryPlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -205,7 +207,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     if (!response.ok) throw new Error('下载失败，请稍后再试');
     const objectUrl = URL.createObjectURL(await response.blob());
     const link = document.createElement('a');
-    link.href = objectUrl; link.download = currentSong.name + ' - ' + currentSong.artist + '.mp3';
+    link.href = objectUrl; link.download = currentSong.name + ' - ' + currentSong.artist + (currentSong.trial ? ' [试听]' : '') + '.' + (currentSong.format || 'mp3');
     link.click();
     showToast('歌曲下载已开始', { tone: 'success' });
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
@@ -226,7 +228,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
       <div className="player-row">
         <div className="player-track">
           <SongCover src={currentSong?.prcUrl} />
-          <div><strong>{currentSong?.name || '还没有歌曲'}</strong>{currentSong?.artist && <span>{currentSong.artist}</span>}</div>
+          <div><div className="song-title"><strong title={currentSong?.name}>{currentSong?.name || '还没有歌曲'}</strong>{currentSong && <SongBadges song={currentSong} />}</div>{currentSong?.artist && <span>{currentSong.artist}</span>}</div>
         </div>
         <button className="sync-button" data-playback-control disabled={busy} onClick={() => void perform(resyncPlayback)} title="重新同步到大家的播放位置" aria-label="重新同步">
           <SyncRounded fontSize="small" /><span>{connection === 'connected' ? '同步中' : '同步'}</span><i />
@@ -243,7 +245,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
         </div>
         <button className="icon-button fullscreen-button" onClick={() => void perform(toggleFullscreen)} aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'}>{fullscreen ? <FullscreenExitRounded /> : <FullscreenRounded />}</button>
       </div>
-      <audio key={corsEnabled ? 'cors' : 'native'} ref={bindAudio} crossOrigin={corsEnabled ? 'anonymous' : undefined} hidden onTimeUpdate={event => setCurrentPosition(event.currentTarget.currentTime * 1000)} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => {
+      <audio key={corsEnabled ? 'cors' : 'native'} ref={bindAudio} crossOrigin={corsEnabled ? 'anonymous' : undefined} hidden onTimeUpdate={event => setCurrentPosition(Math.max(0, event.currentTarget.currentTime * 1000 - audioOffset))} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => {
         if (audioUrl && corsEnabled) { setNonCorsUrl(audioUrl); return; }
         if (audioUrl) { setIsPlaying(false); setNotice('这首歌暂时无法播放，请重新同步或切换歌曲'); }
       }} />

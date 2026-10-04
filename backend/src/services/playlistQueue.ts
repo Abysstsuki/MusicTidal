@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
 import type { PlaylistEntry, PlaylistIndex, PlaylistOrder } from '../types/playlist';
 import { HttpError } from '../utils/httpError';
+import type { MusicProvider } from '../types/song';
 
 type Entry = { index: PlaylistIndex; entryId: string; addedBy: { id: number; username: string }; remaining: number[];
   order: PlaylistOrder; repeat: boolean; priority: number[]; error: string | null; halted: boolean; failures: number };
-export type PlaylistCandidate = { entryId: string; songId: number; userId: number; playlistId: number };
+export type PlaylistCandidate = { entryId: string; songId: number; userId: number; playlistId: number; provider?: MusicProvider };
 export class PlaylistQueue {
   private entries = new Map<string, Entry>();
   activeEntryId: string | null = null;
@@ -20,7 +21,7 @@ export class PlaylistQueue {
       priorityNext: [...entry.priority], error: entry.error, completed: !entry.remaining.length && !entry.priority.length }));
   }
   add(index: PlaylistIndex, addedBy: { id: number; username: string }) {
-    const found = [...this.entries.values()].find(entry => entry.index.playlist.id === index.playlist.id);
+    const found = [...this.entries.values()].find(entry => entry.index.playlist.id === index.playlist.id && (entry.index.playlist.provider || 'netease') === (index.playlist.provider || 'netease'));
     if (found) return found.entryId;
     if (!index.trackIds.length) throw new HttpError(409, '这张歌单暂无歌曲', 'PLAYLIST_EMPTY');
     if (this.entries.size >= 50) throw new HttpError(409, '房间最多保留 50 张歌单');
@@ -57,7 +58,7 @@ export class PlaylistQueue {
     if (entry.halted) return null;
     if (!entry.priority.length && !entry.remaining.length && entry.repeat) this.resetRound(entry);
     const songId = entry.priority[0] || entry.remaining[0];
-    return songId ? { entryId: entry.entryId, songId, userId: entry.addedBy.id, playlistId: entry.index.playlist.id } : null;
+    return songId ? { entryId: entry.entryId, songId, userId: entry.addedBy.id, playlistId: entry.index.playlist.id, provider: entry.index.playlist.provider || 'netease' } : null;
   }
   consume(candidate: PlaylistCandidate, success: boolean) {
     const entry = this.get(candidate.entryId);
@@ -69,10 +70,18 @@ export class PlaylistQueue {
   block(entryId: string, message: string) {
     const entry = this.get(entryId); entry.error = message; entry.halted = true;
   }
-  invalidateSource(userId: number) {
+  invalidateSource(userId: number, provider: MusicProvider = 'netease') {
     let active = false;
-    for (const entry of this.entries.values()) if (entry.addedBy.id === userId) {
-      entry.error = '添加者的网易云绑定已变化，请房主重新播放此歌单'; entry.halted = true;
+    for (const entry of this.entries.values()) if (entry.addedBy.id === userId && (entry.index.playlist.provider || 'netease') === provider) {
+      entry.error = '添加者的音乐绑定已变化，请房主重新播放此歌单'; entry.halted = true;
+      if (entry.entryId === this.activeEntryId) active = true;
+    }
+    return active;
+  }
+  invalidateProvider(provider: MusicProvider) {
+    let active = false;
+    for (const entry of this.entries.values()) if ((entry.index.playlist.provider || 'netease') === provider) {
+      this.block(entry.entryId, '房主的对应平台授权已变化，请重新激活歌单');
       if (entry.entryId === this.activeEntryId) active = true;
     }
     return active;

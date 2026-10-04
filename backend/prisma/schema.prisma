@@ -24,5 +24,9 @@ model User {
   neteaseProfile Json?
   neteaseBoundAt DateTime?
   neteaseInvalidAt DateTime?
+  qqmusicCookieEncrypted String? @db.Text
+  qqmusicProfile Json?
+  qqmusicBoundAt DateTime?
+  qqmusicInvalidAt DateTime?
   createdAt   DateTime @default(now())
 }

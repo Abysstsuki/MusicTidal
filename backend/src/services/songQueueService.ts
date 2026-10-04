@@ -1,14 +1,16 @@
-import { RecommendationState, Song, SongWithInstance } from '../types/song';
+import { RecommendationState, Song, SongWithInstance, MusicProvider, PlayInfo, songKey } from '../types/song';
 import { HeartModeError, HeartModeSession } from './netease/recommendation.service';
 import { PlaylistQueue, type PlaylistCandidate } from './playlistQueue';
 import type { PlaybackMode, PlaylistIndex, PlaylistOrder, PlaylistState } from '../types/playlist';
 import { HttpError } from '../utils/httpError';
 
 export interface QueueDependencies {
-  getPlayInfo: (id: string) => Promise<{ url: string; time: number }>;
+  getPlayInfo: (id: string, song?: Song) => Promise<PlayInfo>;
   createHeartSession: (initialSongId?: number) => Pick<HeartModeSession, 'nextSongs'>;
   emit: (event: { type: string; payload: unknown }) => void;
   getPlaylistSong?: (candidate: PlaylistCandidate) => Promise<Song | undefined>;
+  canPlaySong?: (song: Pick<Song, 'provider'>) => boolean;
+  createRecommendationSession?: (provider: MusicProvider, initialSongId?: number) => { nextSongs(): Promise<Song[]> };
 }
 
 export class SongQueueService {
@@ -26,22 +28,25 @@ export class SongQueueService {
   readonly playlists = new PlaylistQueue();
   private recommendedQueue: SongWithInstance[] = [];
   private recommendationsEnabled = false;
-  private recommendationPhase: 'heart' | null = null;
+  private recommendationPhase: 'heart' | 'roam' | null = null;
+  private recommendationProvider: MusicProvider | null = null;
   private recommendationLoading = false;
   private recommendationError: string | null = null;
   private recommendationGeneration = 0;
   private refillTask: Promise<void> | null = null;
   private refillRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  private recentSongIds: number[] = [];
-  private excludedRecommendationIds: number[] = [];
+  private recentSongIds: string[] = [];
+  private excludedRecommendationIds: string[] = [];
   private heartModeSession: Pick<HeartModeSession, 'nextSongs'> | null = null;
 
   getCurrentSong() { return this.currentSong; }
   getPlayback() { return { song: this.currentSong?.song || null, url: this.currentSong?.url || '', startTime: this.currentSong?.startTime || 0, playbackRevision: this.playbackRevision }; }
-  getQueue() { return [...this.queue, ...this.recommendedQueue]; }
-  peek() { return this.queue[0] || this.recommendedQueue[0]; }
+  private available(song: Pick<Song, 'provider'>) { return this.dependencies.canPlaySong?.(song) ?? true; }
+  getQueue() { return [...this.queue, ...this.recommendedQueue].map(song => ({ ...song,
+    unavailableReason: this.available(song) ? null : `房主尚未有效绑定${song.provider === 'qqmusic' ? ' QQ 音乐' : '网易云'}` })); }
+  peek() { return this.queue.find(song => this.available(song)) || this.recommendedQueue.find(song => this.available(song)); }
   getRecommendationState(): RecommendationState {
-    return { enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, queued: this.recommendedQueue.length, error: this.recommendationError, paused: this.mode === 'playlist' };
+    return { enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, provider: this.recommendationProvider, queued: this.recommendedQueue.length, error: this.recommendationError, paused: this.mode === 'playlist' };
   }
   getPlaylistState(): PlaylistState {
     return { mode: this.mode, activeEntryId: this.playlists.activeEntryId, entries: this.playlists.snapshots(), loading: this.mode === 'playlist' && this.loading };
@@ -73,9 +78,9 @@ export class SongQueueService {
     if (entryId === this.playlists.activeEntryId && this.mode === 'playlist') this.cancelPendingSelection();
     this.playlists.remove(entryId); this.broadcastPlaylists();
   }
-  invalidatePlaylistSource(userId: number) {
+  invalidatePlaylistSource(userId: number, provider: MusicProvider = 'netease') {
     if (this.disposed) return;
-    if (this.playlists.invalidateSource(userId) && this.mode === 'playlist') this.cancelPendingSelection();
+    if (this.playlists.invalidateSource(userId, provider) && this.mode === 'playlist') this.cancelPendingSelection();
     this.broadcastPlaylists();
   }
   private assertAlive() { if (this.disposed) throw new HttpError(404, '房间已结束', 'ROOM_CLOSED'); }
@@ -106,11 +111,16 @@ export class SongQueueService {
     return added;
   }
 
-  dequeue() { return this.queue.shift() || this.recommendedQueue.shift(); }
+  dequeue() {
+    for (const queue of [this.queue, this.recommendedQueue]) {
+      const index = queue.findIndex(song => this.available(song));
+      if (index >= 0) return queue.splice(index, 1)[0];
+    }
+  }
   clear() { this.queue = []; this.stopRecommendations(); }
   removeById(instanceId: number) {
     const removedRecommendation = this.recommendedQueue.find(song => song.instanceId === instanceId);
-    if (removedRecommendation) this.excludeRecommendation(removedRecommendation.id);
+    if (removedRecommendation) this.excludeRecommendation(removedRecommendation);
     this.queue = this.queue.filter(song => song.instanceId !== instanceId);
     this.recommendedQueue = this.recommendedQueue.filter(song => song.instanceId !== instanceId);
     this.broadcastQueue();
@@ -133,14 +143,17 @@ export class SongQueueService {
     }
   }
 
-  async startHeartMode(): Promise<RecommendationState> {
+  async startHeartMode(provider: MusicProvider = 'netease'): Promise<RecommendationState> {
     if (this.disposed) return this.getRecommendationState();
+    if (this.recommendationsEnabled && this.recommendationProvider !== provider) this.stopRecommendations();
     if (!this.recommendationsEnabled) {
       ++this.recommendationGeneration;
       this.recommendationsEnabled = true;
-      this.recommendationPhase = 'heart';
+      this.recommendationProvider = provider;
+      this.recommendationPhase = provider === 'netease' ? 'heart' : 'roam';
       this.recommendationError = null;
-      this.heartModeSession = this.dependencies.createHeartSession(this.currentSong?.song.id);
+      const initial = (this.currentSong?.song.provider || 'netease') === provider ? this.currentSong?.song.id : undefined;
+      this.heartModeSession = this.dependencies.createRecommendationSession?.(provider, initial) || this.dependencies.createHeartSession(initial);
       this.broadcastRecommendationState();
     }
     await this.refillRecommendations();
@@ -152,6 +165,7 @@ export class SongQueueService {
     this.recommendationsEnabled = false;
     this.recommendationLoading = false;
     this.recommendationPhase = null;
+    this.recommendationProvider = null;
     this.recommendationError = null;
     this.recommendedQueue = [];
     this.heartModeSession = null;
@@ -168,24 +182,26 @@ export class SongQueueService {
     const seen = new Set([
       ...(allowRecent ? this.recentSongIds.slice(-1) : this.recentSongIds),
       ...this.excludedRecommendationIds,
-      ...this.getQueue().map(song => song.id),
-      ...(this.currentSong ? [this.currentSong.song.id] : []),
-      ...(this.loadingSong ? [this.loadingSong.id] : []),
+      ...this.getQueue().map(songKey),
+      ...(this.currentSong ? [songKey(this.currentSong.song)] : []),
+      ...(this.loadingSong ? [songKey(this.loadingSong)] : []),
     ]);
     return songs.filter(song => {
-      if (seen.has(song.id)) return false;
-      seen.add(song.id);
+      if (seen.has(songKey(song))) return false;
+      seen.add(songKey(song));
       return true;
     });
   }
 
-  private rememberSong(id: number) {
+  private rememberSong(song: Song) {
+    const id = songKey(song);
     this.recentSongIds = this.recentSongIds.filter(songId => songId !== id);
     this.recentSongIds.push(id);
     if (this.recentSongIds.length > 100) this.recentSongIds.shift();
   }
 
-  private excludeRecommendation(id: number) {
+  private excludeRecommendation(song: Song) {
+    const id = songKey(song);
     this.excludedRecommendationIds = this.excludedRecommendationIds.filter(songId => songId !== id);
     this.excludedRecommendationIds.push(id);
     if (this.excludedRecommendationIds.length > 100) this.excludedRecommendationIds.shift();
@@ -197,7 +213,7 @@ export class SongQueueService {
     if (this.refillTask) return this.refillTask;
     const generation = this.recommendationGeneration;
     this.recommendationLoading = true;
-    this.recommendationPhase = 'heart';
+    this.recommendationPhase = this.recommendationProvider === 'qqmusic' ? 'roam' : 'heart';
     this.recommendationError = null;
     this.broadcastRecommendationState();
     this.refillTask = this.loadHeartMode(generation, session);
@@ -227,17 +243,17 @@ export class SongQueueService {
         // A repeated upstream batch must not be rejected forever by playback history.
         // Keep current, queued, skipped and unavailable songs excluded, as well as the last played song.
         const fallback = this.filterFreshSongs(candidates, true)
-          .sort((a, b) => this.recentSongIds.indexOf(a.id) - this.recentSongIds.indexOf(b.id)).slice(0, 3);
+          .sort((a, b) => this.recentSongIds.indexOf(songKey(a)) - this.recentSongIds.indexOf(songKey(b))).slice(0, 3);
         this.recommendedQueue.push(...fallback.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'heart' as const })));
         added += fallback.length;
       }
       if (!added && !this.recommendedQueue.length) {
-        this.recommendationError = '暂时没有可播放的心动推荐，30 秒后自动重试';
+        this.recommendationError = '暂时没有可播放的推荐，30 秒后自动重试';
         console.warn('Heart mode returned no eligible songs; retrying in 30 seconds.', { received: candidates.length });
       }
     } catch (error) {
       if (generation === this.recommendationGeneration) {
-        const problem = error instanceof HeartModeError ? error : new HeartModeError('心动模式暂不可用', true);
+        const problem = error instanceof HeartModeError ? error : new HeartModeError(this.recommendationProvider === 'qqmusic' ? 'QQ 漫游暂不可用' : '心动模式暂不可用', true);
         this.recommendationError = problem.message + (problem.retryable ? '，30 秒后自动重试' : '');
         if (!problem.retryable) {
           this.recommendationsEnabled = false;
@@ -285,9 +301,10 @@ export class SongQueueService {
         this.loadingSong = nextSong;
       }
       if (!nextSong) throw new Error('No next song');
-      const playInfo = await this.dependencies.getPlayInfo(String(nextSong.id));
+      if (!this.available(nextSong)) throw new HttpError(409, '房主对应平台授权不可用', 'MUSIC_BINDING_REQUIRED');
+      const playInfo = await this.dependencies.getPlayInfo(String(nextSong.id), nextSong);
       if (generation !== this.generation) return;
-      if (nextSong.source === 'heart' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.length)) {
+      if (nextSong.source === 'heart' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.some(song => this.available(song)))) {
         if (this.recommendationsEnabled && recommendationGeneration === this.recommendationGeneration) this.recommendedQueue.unshift(nextSong);
         this.broadcastQueue();
         return;
@@ -295,12 +312,13 @@ export class SongQueueService {
       if (!playInfo?.url) throw new Error('No playable URL');
       const duration = playInfo.time > 0 ? Math.min(nextSong.duration || playInfo.time, playInfo.time) : nextSong.duration;
       if (!Number.isFinite(duration) || duration <= 0) throw new Error('Invalid song duration');
-      const song = { ...nextSong, duration };
+      const { url: _url, time: _time, ...metadata } = playInfo;
+      const song = { ...nextSong, ...metadata, originalDuration: nextSong.duration || playInfo.originalDuration || duration, duration };
       const startTime = Date.now();
       this.currentSong = { song, url: playInfo.url, startTime };
       if (playlistCandidate) this.playlists.consume(playlistCandidate, true);
       ++this.playbackRevision;
-      this.rememberSong(song.id);
+      this.rememberSong(song);
       this.emit({ type: 'PLAY_SONG', payload: this.getPlayback() });
       this.broadcastPlaylists();
       // Song duration is milliseconds. Only the server advances shared playback.
@@ -313,13 +331,17 @@ export class SongQueueService {
     } catch (error) {
       if (generation === this.generation) {
         if (playlistCandidate) {
-          if (error instanceof HttpError) this.playlists.block(playlistCandidate.entryId, error.message);
+          if (error instanceof HttpError && error.status === 409) this.playlists.block(playlistCandidate.entryId, error.message);
           else this.playlists.consume(playlistCandidate, false);
           this.broadcastPlaylists();
         }
         if (nextSong) {
-          this.rememberSong(nextSong.id);
-          if (nextSong.source === 'heart') this.excludeRecommendation(nextSong.id);
+          if (nextSong.source === 'manual' && !this.available(nextSong)) this.queue.unshift(nextSong);
+          else {
+            this.rememberSong(nextSong);
+            if (nextSong.source === 'heart') this.excludeRecommendation(nextSong);
+            this.emit({ type: 'PLAYBACK_NOTICE', payload: { message: `${nextSong.name}没有可用音频，已跳过`, provider: nextSong.provider || 'netease' } });
+          }
           console.warn('Skipping unavailable track:', nextSong.id);
         }
       }
@@ -339,8 +361,8 @@ export class SongQueueService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.loading = false;
-    if (this.currentSong?.song.source === 'heart') this.excludeRecommendation(this.currentSong.song.id);
-    if (this.loadingSong?.source === 'heart') this.excludeRecommendation(this.loadingSong.id);
+    if (this.currentSong?.song.source === 'heart') this.excludeRecommendation(this.currentSong.song);
+    if (this.loadingSong?.source === 'heart') this.excludeRecommendation(this.loadingSong);
     this.loadingSong = null;
     this.finishCurrentSong();
     void this.startNextSongIfIdle();
@@ -357,13 +379,18 @@ export class SongQueueService {
   }
   private broadcastRecommendationState() { this.emit({ type: 'RECOMMENDATIONS_UPDATED', payload: this.getRecommendationState() }); }
   private emit(event: { type: string; payload: unknown }) { if (!this.disposed) this.dependencies.emit(event); }
-  resetAuthorization() {
+  resetAuthorization(provider?: MusicProvider) {
     if (this.disposed) return;
-    if (!this.currentSong) {
+    const selected = this.loadingSong?.provider || (this.mode === 'playlist' && this.playlists.activeEntryId ? this.playlists.get(this.playlists.activeEntryId).index.playlist.provider : 'netease') || 'netease';
+    if ((!provider || selected === provider) && this.loading) {
       this.cancelPendingSelection();
     }
-    this.excludedRecommendationIds = [];
-    this.stopRecommendations();
+    if (provider) this.playlists.invalidateProvider(provider);
+    if (!provider || this.recommendationProvider === provider) {
+      this.excludedRecommendationIds = this.excludedRecommendationIds.filter(id => provider && !id.startsWith(provider + ':'));
+      this.stopRecommendations();
+    }
+    this.broadcastQueue(); this.broadcastPlaylists(); void this.startNextSongIfIdle();
   }
   dispose() {
     if (this.disposed) return;

@@ -18,8 +18,8 @@ test('normalizes legacy song fields and nested heart records without duplicates'
     { id: 1, name: 'duplicate' }, null, { id: -1, name: 'invalid' },
     { id: 2, name: 'FM', artists: [{ name: 'B' }], album: { picUrl: 'fm' }, duration: 2000 },
   ]), [
-    { id: 1, name: 'Track', artist: 'A', prcUrl: 'cover', duration: 1000 },
-    { id: 2, name: 'FM', artist: 'B', prcUrl: 'fm', duration: 2000 },
+    { provider: 'netease', access: 'unknown', id: 1, name: 'Track', artist: 'A', prcUrl: 'cover', duration: 1000 },
+    { provider: 'netease', access: 'unknown', id: 2, name: 'FM', artist: 'B', prcUrl: 'fm', duration: 2000 },
   ]);
   assert.equal(normalizeHeartModeSongs([{ songInfo: { id: 3, name: 'Heart' } }])[0].id, 3);
 });

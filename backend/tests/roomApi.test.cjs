@@ -41,6 +41,8 @@ test('REST and WebSocket enforce admission, roles, isolation and host departure 
   const event = await chat; assert.equal(event.payload.username, 'Friends'); assert.equal(event.payload.userId, 3);
   assert.ok(!other.messages.some(event => event.type === 'chat'));
   const payload = { song: { id: 10, name: 'Test', artist: 'Artist', duration: 300000, prcUrl: '' } };
+  assert.equal((await request('/api/rooms/' + a.id + '/queue/add', 3, 'POST', payload)).status, 409);
+  await api.bind(1);
   assert.equal((await request('/api/rooms/' + a.id + '/queue/add', 3, 'POST', payload)).status, 200);
   assert.equal((await request('/api/rooms/' + a.id + '/netease/song/search?keywords=test', 3)).status, 200);
   const state = (await request('/api/rooms/' + a.id + '/state', 3)).body;

@@ -29,6 +29,7 @@ const cacheTtl = 120_000;
 const cacheLimit = 100;
 const cache = new Map<string, { expires: number; data: any }>();
 const pending = new Map<string, Promise<{ data: any }>>();
+const invalidatedTasks = new WeakSet<Promise<{ data: any }>>();
 let guestToken = '';
 let guestTask: Promise<string> | null = null;
 
@@ -38,6 +39,7 @@ export interface RequestParams {
 
 export interface NeteaseClient {
   get(pathname: string, config?: RequestParams): Promise<{ data: any }>;
+  dispose?(clearCache?: boolean): void;
 }
 
 export class NeteaseApiError extends Error {
@@ -98,12 +100,13 @@ export async function callNeteaseModule(pathname: string, cookie: string, params
   }
 }
 
-async function get(cookie: string, onExpired: (() => void) | undefined, pathname: string, config?: RequestParams): Promise<{ data: any }> {
+async function get(cookie: string, onExpired: (() => void) | undefined, pathname: string, config: RequestParams | undefined, isActive: () => boolean): Promise<{ data: any }> {
   const module = modules[pathname];
   if (!module) throw new Error('Unsupported embedded Netease endpoint');
 
   const realIP = process.env.NETEASE_REAL_IP?.trim() || '116.25.146.177';
   const anonymousToken = await getAnonymousToken(cookie, realIP);
+  if (!isActive()) throw new NeteaseApiError(409);
   const params = config?.params || {};
   const canCache = cacheableEndpoints.has(pathname) && params.timestamp === undefined;
   const identity = crypto.createHash('sha256').update(cookie + '\0' + anonymousToken).digest('hex');
@@ -117,7 +120,8 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
     if (running) return running;
   }
 
-  const task = (async () => {
+  let task!: Promise<{ data: any }>;
+  task = (async () => {
     try {
       // Modules receive fresh cookie objects; their os/appver mutations stay local.
       const response = await module({ ...params, cookie, realIP, anonymousToken, timeout: 15000 });
@@ -126,7 +130,7 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
         onExpired?.();
         throw new NeteaseApiError(401);
       }
-      if (canCache && response.body?.code === 200) {
+      if (canCache && response.body?.code === 200 && isActive() && !invalidatedTasks.has(task)) {
         if (cache.size >= cacheLimit) cache.delete(cache.keys().next().value!);
         cache.set(cacheKey, { expires: Date.now() + cacheTtl, data: response.body });
       }
@@ -137,7 +141,7 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
       if (upstreamCode === 301 || upstreamCode === 401) onExpired?.();
       throw new NeteaseApiError(typeof upstreamCode === 'number' && Number.isSafeInteger(upstreamCode) ? upstreamCode : 502);
     } finally {
-      if (canCache) pending.delete(cacheKey);
+      if (canCache && pending.get(cacheKey) === task) pending.delete(cacheKey);
     }
   })();
   if (canCache) pending.set(cacheKey, task);
@@ -146,9 +150,27 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
 
 // Preserve the existing { data } facade; calls now stay inside this process.
 export function createNeteaseClient(cookie: string, onExpired?: () => void): NeteaseClient {
-  let reported = false;
-  const expired = () => { if (!reported) { reported = true; onExpired?.(); } };
-  return { get: (pathname, config) => get(cookie, expired, pathname, config) };
+  let reported = false, disposed = false;
+  const expired = () => { if (!reported && !disposed) { reported = true; onExpired?.(); } };
+  return { get: async (pathname, config) => {
+    if (disposed) throw new NeteaseApiError(409);
+    try {
+      const response = await get(cookie, expired, pathname, config, () => !disposed);
+      if (disposed) throw new NeteaseApiError(409);
+      return response;
+    } catch (error) {
+      // A coalesced request may belong to a client that was disposed meanwhile.
+      if (error instanceof NeteaseApiError && [301, 401].includes(error.code)) expired();
+      throw error;
+    }
+  }, dispose: clearCache => {
+    disposed = true;
+    if (clearCache && cookie) {
+      const identity = crypto.createHash('sha256').update(cookie + '\0').digest('hex');
+      for (const key of cache.keys()) if (JSON.parse(key)[1] === identity) cache.delete(key);
+      for (const [key, task] of pending) if (JSON.parse(key)[1] === identity) { invalidatedTasks.add(task); pending.delete(key); }
+    }
+  } };
 }
 
 // Compatibility facade is always anonymous; room requests supply their own client.

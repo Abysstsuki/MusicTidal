@@ -1,4 +1,18 @@
+export type MusicProvider = 'netease' | 'qqmusic';
+export const providerName = (provider?: MusicProvider) => provider === 'qqmusic' ? 'QQ 音乐' : '网易云';
+export const songKey = (song: Pick<Song, 'id' | 'provider'>) => `${song.provider || 'netease'}:${song.id}`;
 export interface Song {
+  provider?: MusicProvider;
+  mid?: string;
+  mediaMid?: string;
+  access?: 'free' | 'vip' | 'paid' | 'quality' | 'unknown';
+  rights?: { play?: number; membership?: number; download?: number };
+  trial?: boolean;
+  lyricOffset?: number;
+  audioOffset?: number;
+  originalDuration?: number;
+  format?: string;
+  unavailableReason?: string | null;
   id: number;
   name: string;
   artist: string;
@@ -22,7 +36,8 @@ export interface QueueSong extends Song {
 export interface RecommendationState {
   enabled: boolean;
   loading: boolean;
-  phase: 'heart' | null;
+  phase: 'heart' | 'roam' | null;
+  provider?: MusicProvider | null;
   queued: number;
   error: string | null;
   paused?: boolean;

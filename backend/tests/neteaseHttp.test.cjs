@@ -5,7 +5,8 @@ const vendorPath = require.resolve('../vendor/netease');
 const real = require(vendorPath);
 let calls = [];
 let responseCode = 200;
-const fakeModule = async params => { calls.push(params); return { status: 200, body: { code: responseCode, result: { songs: [] } }, cookie: [] }; };
+let beforeRespond;
+const fakeModule = async params => { calls.push(params); await beforeRespond?.(params); return { status: 200, body: { code: responseCode, result: { songs: [] } }, cookie: [] }; };
 require.cache[vendorPath].exports = { ...real, cloudsearch: fakeModule, user_account: fakeModule };
 const { createNeteaseClient, neteaseHttp } = require('../src/utils/neteaseHttp');
 test('request/cache identities are account-specific and guest requests ignore the global cookie', async t => {
@@ -25,6 +26,51 @@ test('expired authorization is reported once and upstream payloads stay private'
   const client = createNeteaseClient('MUSIC_U=expired-fixture', () => expired++);
   for (let i = 0; i < 2; i++) await assert.rejects(client.get('/user/account'), error => error.code === 401 && error.body === undefined && !error.message.includes('expired-fixture'));
   assert.equal(expired, 1);
+});
+
+test('binding disposal drops stale in-flight results and clears only that account cache', async t => {
+  responseCode = 200; let expired = 0;
+  let release, started;
+  const gate = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  beforeRespond = async params => { if (params.cookie === 'MUSIC_U=disposed-fixture') { started(); await gate; } };
+  t.after(() => { release(); beforeRespond = undefined; responseCode = 200; });
+  const options = { params: { keywords: 'disposal-fixture' } };
+  const other = createNeteaseClient('MUSIC_U=unaffected-fixture');
+  await other.get('/cloudsearch', options);
+  const client = createNeteaseClient('MUSIC_U=disposed-fixture', () => expired++);
+  const pending = client.get('/cloudsearch', options);
+  await entered;
+  client.dispose(true); release();
+  await assert.rejects(pending, error => error.code === 409);
+  beforeRespond = undefined;
+  const callCount = calls.length;
+  await other.get('/cloudsearch', options);
+  assert.equal(calls.length, callCount, 'unrelated cached requests remain cached');
+  await createNeteaseClient('MUSIC_U=disposed-fixture').get('/cloudsearch', options);
+  assert.equal(calls.length, callCount + 1, 'stale result must not recreate the invalidated cache');
+  const stale = createNeteaseClient('MUSIC_U=stale-expiry-fixture', () => expired++);
+  beforeRespond = async params => { if (params.cookie === 'MUSIC_U=stale-expiry-fixture') stale.dispose(true); };
+  responseCode = 401;
+  await assert.rejects(stale.get('/user/account'));
+  assert.equal(expired, 0, 'an old request cannot invalidate a replacement binding');
+});
+
+test('a live client still reports expiry when its coalesced request creator was disposed', async t => {
+  responseCode = 401; let oldExpired = 0, liveExpired = 0, release, started;
+  const gate = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  beforeRespond = async () => { started(); await gate; };
+  t.after(() => { release(); beforeRespond = undefined; responseCode = 200; });
+  const old = createNeteaseClient('MUSIC_U=shared-expiry-fixture', () => oldExpired++);
+  const live = createNeteaseClient('MUSIC_U=shared-expiry-fixture', () => liveExpired++);
+  const options = { params: { keywords: 'shared-expiry-fixture' } };
+  const first = old.get('/cloudsearch', options); await entered;
+  const second = live.get('/cloudsearch', options);
+  await new Promise(resolve => setImmediate(resolve));
+  old.dispose(); release();
+  await assert.rejects(first); await assert.rejects(second);
+  assert.equal(oldExpired, 0); assert.equal(liveExpired, 1);
 });
 
 test('desktop QR transport retains session identity and accepts plain string status codes', async () => {

@@ -12,7 +12,10 @@ function manager(t) { const value = new RoomManager(async () => guest); t.after(
 test('rooms isolate queue, playback, messages and broadcast recipients', async t => {
   const m = manager(t); const a = await m.create({ ...user(1), email: 'private', password: 'sensitive', neteaseCookieEncrypted: 'secret' }, 'Room A'); const b = await m.create(user(2), 'Room B');
   const sa = socket(), sb = socket(); m.connect(a.id, 1, sa); m.connect(b.id, 2, sb);
-  for (const room of [a, b]) room.client = { get: async () => ({ data: { code: 200, data: [{ url: 'https://example.invalid/' + room.id, time: 900000 }] } }) };
+  for (const room of [a, b]) {
+    room.binding = { status: 'bound', profile: null, boundAt: null };
+    room.client = { get: async () => ({ data: { code: 200, data: [{ url: 'https://example.invalid/' + room.id, time: 900000 }] } }) };
+  }
   a.queue.enqueue(song(10)); b.queue.enqueue(song(20)); await settle();
   m.chat(a.id, 1, 'private A');
   assert.equal(a.queue.getCurrentSong().song.id, 10); assert.equal(b.queue.getCurrentSong().song.id, 20);

@@ -60,7 +60,7 @@ export default function RoomActionDialog({ action, active, name, password, busy,
     {switching && active ? <ActiveRoomChoice room={active} onLeft={onLeft} /> : creating ? <form className="room-dialog-form" onSubmit={onCreate}>
       <label>房间名称<input required maxLength={60} disabled={busy} value={name} onChange={event => onNameChange(event.target.value)} placeholder="给房间起个名字" /></label>
       <label><span>房间密码 <small>可选</small></span><input type="password" autoComplete="new-password" disabled={busy} value={password} onChange={event => onPasswordChange(event.target.value)} placeholder="留空即可自由加入" /></label>
-      <p className="room-dialog-hint">创建后你将成为房主，网易云账号可稍后绑定。</p>
+      <p className="room-dialog-hint">创建后你将成为房主，音乐账号可稍后绑定。</p>
       {footer}
     </form> : room?.locked ? <form className="room-dialog-form" onSubmit={event => { event.preventDefault(); onJoin(); }}>
       <label>房间密码<input required type="password" autoComplete="off" disabled={busy} value={password} onChange={event => onPasswordChange(event.target.value)} placeholder="输入房主提供的密码" /></label>

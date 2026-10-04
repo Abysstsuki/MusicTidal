@@ -38,23 +38,24 @@ export default function MusicLyrics() {
   const [failed, setFailed] = useState(false);
   useToastMessage(failed ? '歌词暂时无法加载，请稍后重试' : '', { tone: 'error' });
   const songId = currentSong?.id;
+  const provider = currentSong?.provider || 'netease';
   useEffect(() => {
     setLyrics([]); setTranslations([]); setFailed(false);
     if (!songId) return;
     const controller = new AbortController();
     setLoading(true);
-    requestRoom<{ success: boolean; data?: { lyric: string; tlyric?: string } }>('/netease/lyric?id=' + songId, { signal: controller.signal })
+    requestRoom<{ lyric: string; tlyric?: string }>('/music/lyric?id=' + songId + '&provider=' + provider, { signal: controller.signal })
       .then(data => {
-        if (!controller.signal.aborted && data.success && data.data) {
-          setLyrics(parseLyric(data.data.lyric));
-          setTranslations(parseLyric(data.data.tlyric || ''));
+        if (!controller.signal.aborted) {
+          setLyrics(parseLyric(data.lyric));
+          setTranslations(parseLyric(data.tlyric || ''));
         }
       }).catch(() => { if (!controller.signal.aborted) setFailed(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [songId, requestRoom]);
+  }, [songId, provider, requestRoom]);
 
-  const position = currentPosition / 1000;
+  const position = (currentPosition + (currentSong?.lyricOffset || 0)) / 1000;
   const foundIndex = lyrics.findIndex((line, index) => position >= line.time && (!lyrics[index + 1] || position < lyrics[index + 1].time));
   const index = Math.max(0, foundIndex);
   const active = lyrics[index];
@@ -66,7 +67,7 @@ export default function MusicLyrics() {
   return (
     <CurvedLyrics before={before} center={center} after={after}
       translation={translation !== active?.text ? translation : undefined}
-      lineKey={String(songId) + '-' + index} animated={!!active}
+      lineKey={provider + '-' + String(songId) + '-' + index} animated={!!active}
       fontClass={lyricsFont.variable} />
   );
 }

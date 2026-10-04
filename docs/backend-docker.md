@@ -57,6 +57,9 @@ docker compose --env-file .env.docker logs --tail 100 backend
 | `neteaseCookieEncrypted` | 加密的网易云凭据 |
 | `neteaseProfile` | 网易云账号资料 JSON |
 | `neteaseBoundAt`、`neteaseInvalidAt` | 绑定及失效时间 |
+| `qqmusicCookieEncrypted` | QQ／微信音乐账号完整授权的加密凭据 |
+| `qqmusicProfile` | QQ 音乐公开账号资料 JSON |
+| `qqmusicBoundAt`、`qqmusicInvalidAt` | QQ 绑定及失效时间 |
 | `createdAt` | 用户创建时间 |
 
 Prisma 还会自动创建 `_prisma_migrations` 表记录迁移历史。首次初始化没有预设用户或旧用户，用户通过网页注册后写入 `User` 表。
@@ -68,6 +71,8 @@ PostgreSQL 数据保存在 Compose 创建的 `postgres_data` 卷中。重启或�
 保持一个后端容器，HTTP API 和 WebSocket 使用同一进程的房间状态。后端容器重启会结束所有房间并清空队列、聊天、在线用户及计时器，PostgreSQL 用户及加密的网易云绑定仍保留。多房间改造需要先执行可空字段迁移，再同步发布前后端，详见 [多房间说明](rooms.md)。
 
 ## Cloudflare 前端地址
+
+双音源增量迁移会自动增加四个可空 QQ 字段，保留原用户和网易云绑定。沿用 `NETEASE_COOKIE_ENCRYPTION_KEY`，保持该密钥稳定。Compose 的后端健康检查访问 `/api/health` 并确认数据库可连接；`docker compose ps` 应显示后端和 PostgreSQL 均健康。先部署后端，再发布 Cloudflare 前端；重启后用户及两家绑定都保留，现有房间结束。详见 [双音源实现与验收](dual-music-providers.md)。
 
 在 Cloudflare 的前端构建设置中配置 `NEXT_PUBLIC_BACKEND_URL` 为后端 HTTPS origin（不带 `/api`），并把 `NEXT_PUBLIC_WS_URL` 配成实际的 WSS 地址，然后重新构建发布。后端 HTTP 和 WebSocket 使用同一个服务器域名与端口，TLS 由 Nginx 提供。
 

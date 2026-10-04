@@ -1,6 +1,8 @@
+import type { MusicProvider } from './song';
 export type PlaybackMode = 'regular' | 'playlist';
 export type PlaylistOrder = 'sequential' | 'shuffle';
 export interface PlaylistSummary {
+  provider?: MusicProvider;
   id: number; name: string; coverUrl: string; creator: string; trackCount: number; isLiked: boolean;
 }
 export interface PlaylistIndex { playlist: PlaylistSummary; trackIds: number[] }
