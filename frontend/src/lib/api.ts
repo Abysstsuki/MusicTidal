@@ -20,7 +20,9 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
   const response = await fetch(`${BACKEND_URL}${path}`, { ...options, headers });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    if (response.status === 401 && token) window.dispatchEvent(new Event('auth-expired'));
+    // A failed login describes the submitted credentials, not an existing session.
+    const isAuthSubmission = path === '/api/auth/login' || path === '/api/auth/register';
+    if (response.status === 401 && token && !isAuthSubmission) window.dispatchEvent(new Event('auth-expired'));
     throw new ApiError(data?.error || '请求失败，请稍后再试', response.status, data?.code);
   }
   return response.json() as Promise<T>;

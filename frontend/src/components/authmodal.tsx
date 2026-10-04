@@ -6,6 +6,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlined from '@mui/icons-material/VisibilityOffOutlined';
 import { apiRequest } from '@/lib/api';
+import { authErrorMessage, validateAuthInput } from '@/lib/auth-errors';
 import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import StageDialog from './StageDialog';
 
@@ -31,6 +32,12 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (request.current) return;
+    setError(''); setNotice('');
+    const validationError = validateAuthInput(username, email, password, isRegister);
+    if (validationError) {
+      showToast(validationError, { tone: 'error' });
+      return;
+    }
     const controller = new AbortController();
     request.current = controller;
     setError(''); setNotice(''); setBusy(true);
@@ -44,7 +51,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
         showToast('登录成功', { tone: 'success' });
         onLoginSuccess?.(data.user.username, data.token); onClose();
       }
-    } catch (err) { if (!controller.signal.aborted) setError((err as Error).message); }
+    } catch (err) { if (!controller.signal.aborted) setError(authErrorMessage(err, isRegister)); }
     finally {
       if (request.current === controller) request.current = null;
       if (!controller.signal.aborted) setBusy(false);
@@ -53,11 +60,11 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
   return <StageDialog label={isRegister ? '注册账户' : '登录账户'} onClose={close} closeOnBackdrop={false}>
     <div className="auth-header"><span className="wordmark">Music<span>Tidal</span></span><button className="icon-button" onClick={close} aria-label="关闭登录"><CloseRounded /></button></div>
     <div className="auth-intro"><h2>{isRegister ? '注册账户' : '登录账户'}</h2></div>
-    <form className="auth-form" onSubmit={event => void submit(event)}>
+    <form className="auth-form" noValidate onSubmit={event => void submit(event)}>
       {isRegister && <label>昵称<input required maxLength={40} autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} placeholder="大家怎么称呼你？" /></label>}
       <label>邮箱<input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="你的邮箱" /></label>
       <label>密码<span className="password-field">
-        <input required type={showPassword ? 'text' : 'password'} minLength={6} autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" />
+        <input required type={showPassword ? 'text' : 'password'} minLength={isRegister ? 6 : undefined} autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder={isRegister ? '至少 6 位' : '请输入密码'} />
         <button className="icon-button password-toggle" type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onMouseDown={event => event.preventDefault()} onClick={() => setShowPassword(value => !value)}>{showPassword ? <VisibilityOffOutlined fontSize="small" /> : <VisibilityOutlined fontSize="small" />}</button>
       </span></label>
       <button className="primary-button" type="submit" disabled={busy}>{busy ? '请稍等…' : isRegister ? '注册' : '登录'}<ArrowForwardRounded fontSize="small" /></button>
