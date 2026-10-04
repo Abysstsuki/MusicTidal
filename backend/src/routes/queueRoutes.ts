@@ -3,7 +3,8 @@ import { roomManager } from '../services/roomManager';
 import type { AuthRequest } from '../middlewares/authMiddleware';
 import { HttpError } from '../utils/httpError';
 import {
-    addSongToQueue, 
+    addSongToQueue,
+    addSongsToQueue,
     getQueue, 
     removeFromQueueHandler,
     moveToTopHandler,
@@ -22,6 +23,7 @@ router.post('/mode', (req: AuthRequest, res) => {
 });
 
 router.post('/add', addSongToQueue);
+router.post('/add-batch', addSongsToQueue);
 router.get('/list', getQueue);
 router.post('/remove', removeFromQueueHandler);
 router.post('/moveTop', moveToTopHandler);

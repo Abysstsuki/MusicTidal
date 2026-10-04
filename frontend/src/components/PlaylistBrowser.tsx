@@ -26,18 +26,21 @@ import SongCover from './modelItem/SongCover';
 import NeteaseBinding from './NeteaseBinding';
 import { formatDuration } from './musicplayer';
 import styles from './playlist.module.css';
+import { useBatchSongSelection } from '@/hooks/useBatchSongSelection';
+import BatchSongActions, { BatchSongCheckbox } from './BatchSongActions';
+import batchStyles from './batch-song.module.css';
 
 const PAGE_SIZE = 30;
 type Selection = { playlist: PlaylistSummary; entryId?: string };
-function PageControls({ offset, hasMore, total, change }: { offset: number; hasMore: boolean; total: number | null; change: (offset: number) => void }) {
+function PageControls({ offset, hasMore, total, change, disabled = false }: { offset: number; hasMore: boolean; total: number | null; change: (offset: number) => void; disabled?: boolean }) {
   return <nav className={styles.pagination} aria-label="歌单分页">
-    <button className={styles.controlButton} disabled={!offset} aria-label="上一页" title="上一页" onClick={() => change(Math.max(0, offset - PAGE_SIZE))}><ChevronLeftRounded fontSize="small" /></button>
+    <button className={styles.controlButton} disabled={disabled || !offset} aria-label="上一页" title="上一页" onClick={() => change(Math.max(0, offset - PAGE_SIZE))}><ChevronLeftRounded fontSize="small" /></button>
     <span>{Math.floor(offset / PAGE_SIZE) + 1}{total !== null ? ' / ' + Math.max(1, Math.ceil(total / PAGE_SIZE)) : ' 页'}</span>
-    <button className={styles.controlButton} disabled={!hasMore} aria-label="下一页" title="下一页" onClick={() => change(offset + PAGE_SIZE)}><ChevronRightRounded fontSize="small" /></button>
+    <button className={styles.controlButton} disabled={disabled || !hasMore} aria-label="下一页" title="下一页" onClick={() => change(offset + PAGE_SIZE)}><ChevronRightRounded fontSize="small" /></button>
   </nav>;
 }
 
-function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = true }: { roomOnly?: boolean; provider?: MusicProvider; visible?: boolean }) {
+function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = true, onBusyChange }: { roomOnly?: boolean; provider?: MusicProvider; visible?: boolean; onBusyChange?: (busy: boolean) => void }) {
   const { playlists, playlistAction, requestRoom, enqueue, isHost, syncPlayback, currentSong, room } = useMusicContext();
   const { showToast } = useToast();
   const [binding, setBinding] = useState<Binding | null>(null);
@@ -58,6 +61,12 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
   const entry = selection?.entryId ? playlists.entries.find(item => item.entryId === selection.entryId) : null;
   const active = Boolean(entry && entry.entryId === playlists.activeEntryId);
   const selectedProvider = selection?.playlist.provider || provider;
+  const batch = useBatchSongSelection({ songs: tracks?.items || [], page: offset / PAGE_SIZE,
+    contextKey: provider + ':' + (selection?.entryId || selection?.playlist.id || '') + ':' + query,
+    visible, disabled: busy });
+  const locked = busy || batch.pending;
+  const authorizationScope = JSON.stringify(room?.bindings || room?.binding);
+  useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
   const hostBound = (source: MusicProvider) => (room?.bindings?.[source] || (source === 'netease' ? room?.binding : undefined))?.status === 'bound';
   const reason = (source: MusicProvider) => hostBound(source) ? '' : '房主尚未有效绑定' + providerName(source);
   useEffect(() => {
@@ -100,19 +109,19 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
       }
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [roomOnly, visible, provider, selection, offset, view, keyword, binding?.status, requestRoom, revision, bindingRevision]);
+  }, [roomOnly, visible, provider, selection, offset, view, keyword, binding?.status, requestRoom, revision, bindingRevision, authorizationScope]);
   const perform = async (work: () => Promise<void>, notice: string) => {
-    if (busy) return;
+    if (locked) return;
     setBusy(true);
     try { await work(); showToast(notice, { tone: 'success' }); }
     catch (problem) { if ((problem as Error).name !== 'AbortError') showToast((problem as Error).message, { tone: 'error' }); }
     finally { setBusy(false); }
   };
-  const open = (playlist: PlaylistSummary, entryId?: string) => { setSelection({ playlist, entryId }); setOffset(0); setError(''); setTracks(null); };
-  const back = () => { setSelection(null); setOffset(0); setError(''); setList(null); setTracks(null); };
+  const open = (playlist: PlaylistSummary, entryId?: string) => { if (locked) return; setSelection({ playlist, entryId }); setOffset(0); setError(''); setTracks(null); };
+  const back = () => { if (locked) return; setSelection(null); setOffset(0); setError(''); setList(null); setTracks(null); };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!query.trim()) return; setKeyword(query.trim()); setView('search'); setOffset(0); setRevision(value => value + 1); };
   const added = (id: number) => playlists.entries.some(item => item.id === id && (item.provider || 'netease') === provider);
-  const changeOffset = (next: number) => { if (!loading) setOffset(next); };
+  const changeOffset = (next: number) => { if (!loading && !locked) setOffset(next); };
 
   return <div className={styles.browser}>
     {!selection && !roomOnly && <>
@@ -130,7 +139,7 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
       </form>}
     </>}
     {selection && <>
-      <button className={styles.back} onClick={back}><ChevronLeftRounded fontSize="small" />返回歌单目录</button>
+      <button className={styles.back} disabled={locked} onClick={back}><ChevronLeftRounded fontSize="small" />返回歌单目录</button>
       <div className={styles.detailHeading}>
         <SongCover src={selection.playlist.coverUrl} />
         <div className={styles.detailCopy}>
@@ -139,40 +148,43 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
           {entry && <small title={'本轮已播 ' + entry.played + ' / ' + entry.trackCount + ' 首 · 下一首优先队列 ' + entry.priorityNext.length + ' 首'}>{active ? '选定 · ' : ''}已播 {entry.played}/{entry.trackCount} · 下一首 {entry.priorityNext.length}{entry.completed && !entry.repeat ? ' · 已播完' : ''}</small>}
         </div>
         {entry && <div className={styles.controls} role="group" aria-label="歌单播放控制">
-          <button className={styles.controlButton + (active && playlists.mode === 'playlist' ? ' ' + styles.controlActive : '')} disabled={!isHost || busy || !hostBound(selectedProvider)}
+          <button className={styles.controlButton + (active && playlists.mode === 'playlist' ? ' ' + styles.controlActive : '')} disabled={!isHost || locked || !hostBound(selectedProvider)}
             aria-label={active ? '播放或继续此歌单' : '播放此歌单'} title={isHost ? active ? '播放 / 继续此歌单' : '播放此歌单，当前歌曲结束后接播' : '由房主播放此歌单'}
             onClick={() => void perform(() => playlistAction('/' + entry.entryId + '/activate'), '已选定歌单，当前歌曲结束后接播')}><PlayArrowRounded fontSize="small" /></button>
-          <button className={styles.controlButton + (entry.order === 'shuffle' ? ' ' + styles.controlActive : '')} disabled={!isHost || busy}
+          <button className={styles.controlButton + (entry.order === 'shuffle' ? ' ' + styles.controlActive : '')} disabled={!isHost || locked}
             aria-label={entry.order === 'shuffle' ? '随机播放，切换为顺序播放' : '顺序播放，切换为随机播放'} aria-pressed={entry.order === 'shuffle'}
             title={(entry.order === 'shuffle' ? '随机播放 · 点击切换顺序播放' : '顺序播放 · 点击切换随机播放') + (!isHost ? ' · 由房主设置' : '')}
             onClick={() => void perform(() => playlistAction('/' + entry.entryId + '/settings', { order: entry.order === 'shuffle' ? 'sequential' : 'shuffle' }, 'PATCH'), entry.order === 'shuffle' ? '已切换顺序播放' : '已切换随机播放')}>
             {entry.order === 'shuffle' ? <ShuffleRounded fontSize="small" /> : <FormatListNumberedRounded fontSize="small" />}
           </button>
-          <button className={styles.controlButton + (entry.repeat ? ' ' + styles.controlActive : '')} disabled={!isHost || busy}
+          <button className={styles.controlButton + (entry.repeat ? ' ' + styles.controlActive : '')} disabled={!isHost || locked}
             aria-label={entry.repeat ? '关闭整单循环' : '开启整单循环'} aria-pressed={entry.repeat}
             title={(entry.repeat ? '整单循环已开启 · 点击关闭' : '播完停止 · 点击开启整单循环') + (!isHost ? ' · 由房主设置' : '')}
             onClick={() => void perform(() => playlistAction('/' + entry.entryId + '/settings', { repeat: !entry.repeat }, 'PATCH'), entry.repeat ? '已关闭整单循环' : '已开启整单循环')}><RepeatRounded fontSize="small" /></button>
         </div>}
-        {!entry && <button className={styles.controlButton + (added(selection.playlist.id) ? ' ' + styles.controlActive : '')} disabled={busy || added(selection.playlist.id) || !hostBound(selectedProvider)}
+        {!entry && <button className={styles.controlButton + (added(selection.playlist.id) ? ' ' + styles.controlActive : '')} disabled={locked || added(selection.playlist.id) || !hostBound(selectedProvider)}
           aria-label={added(selection.playlist.id) ? '歌单已加入房间' : '整张歌单加入房间'} title={reason(selectedProvider) || (added(selection.playlist.id) ? '已在房间目录中' : '整张歌单加入房间')}
           onClick={() => void perform(() => playlistAction('', { playlistId: selection.playlist.id, provider: selectedProvider }), '整张歌单已加入房间目录')}>{added(selection.playlist.id) ? <CheckRounded fontSize="small" /> : <AddRounded fontSize="small" />}</button>}
       </div>
       {entry?.error && <p className="inline-error" role="status">{entry.error}</p>}
       {!hostBound(selectedProvider) && <p className="inline-error" role="status">{reason(selectedProvider)}，可浏览，暂时无法加入房间或播放。</p>}
+      <BatchSongActions batch={batch} loading={loading} />
     </>}
-    {error && <p className="inline-error" role="status">{error}<button className={styles.controlButton} aria-label="重试读取歌单" title="重试" onClick={() => setRevision(value => value + 1)}><RefreshRounded fontSize="small" /></button></p>}
+    {error && <p className="inline-error" role="status">{error}<button className={styles.controlButton} disabled={locked} aria-label="重试读取歌单" title="重试" onClick={() => setRevision(value => value + 1)}><RefreshRounded fontSize="small" /></button></p>}
     {loading ? <div className="panel-empty" role="status"><p>正在读取歌单…</p></div> : selection ? <>
       <div className="song-list" aria-label="歌单歌曲">
-        {tracks?.items.map(song => <div className={'song-row ' + styles.row} key={songKey(song)}>
+        {tracks?.items.map((song, index) => <div className={'song-row ' + styles.row + (batch.active ? ' ' + batchStyles.selectableRow : '') + (batch.selected.has(songKey(song)) ? ' ' + batchStyles.selectedRow : '')} key={songKey(song)}
+          onClick={event => { if (batch.active && !(event.target as Element).closest('button, input, a, label')) batch.toggle(song, index); }}>
+          {batch.active && <BatchSongCheckbox batch={batch} song={song} index={index} />}
           <SongCover src={song.prcUrl} /><div className="song-row-info"><div className="song-title"><strong title={song.name}>{song.name}{currentSong?.source === 'playlist' && currentSong.playlistEntryId === selection.entryId && songKey(currentSong) === songKey(song) ? ' · 播放中' : ''}</strong><SongBadges song={song} /></div><span>{song.artist} · {formatDuration(song.duration)}{entry?.priorityNext.includes(song.id) ? ' · 下一首待播' : ''}</span></div>
           <div className="song-row-actions">
-            <button className={styles.controlButton} disabled={busy || !hostBound(song.provider || 'netease')} aria-label={'加入常规待播 ' + song.name} title={reason(song.provider || 'netease') || '加入常规待播'} onClick={() => void perform(() => enqueue(song), '已加入常规待播 · ' + song.name)}><AddRounded fontSize="small" /></button>
-            {entry && <button className={styles.controlButton} disabled={busy || !hostBound(selectedProvider) || !active || entry.priorityNext.includes(song.id)} aria-label={'下一首播放 ' + song.name} title={reason(selectedProvider) || (active ? '歌单模式下一首播放' : '房主选定此歌单后可指定下一首')} onClick={() => void perform(() => playlistAction('/' + entry.entryId + '/next', { songId: song.id }), '已加入歌单下一首优先队列')}><SkipNextRounded fontSize="small" /></button>}
+            <button className={styles.controlButton} disabled={locked || !hostBound(song.provider || 'netease')} aria-label={'加入常规待播 ' + song.name} title={reason(song.provider || 'netease') || '加入常规待播'} onClick={() => void perform(() => enqueue(song), '已加入常规待播 · ' + song.name)}><AddRounded fontSize="small" /></button>
+            {entry && <button className={styles.controlButton} disabled={locked || !hostBound(selectedProvider) || !active || entry.priorityNext.includes(song.id)} aria-label={'下一首播放 ' + song.name} title={reason(selectedProvider) || (active ? '歌单模式下一首播放' : '房主选定此歌单后可指定下一首')} onClick={() => void perform(() => playlistAction('/' + entry.entryId + '/next', { songId: song.id }), '已加入歌单下一首优先队列')}><SkipNextRounded fontSize="small" /></button>}
           </div>
         </div>)}
         {tracks && !tracks.items.length && <div className="panel-empty"><p>这一页暂无可读取歌曲</p></div>}
       </div>
-      {tracks && <PageControls offset={offset} hasMore={tracks.hasMore} total={tracks.total} change={changeOffset} />}
+      {tracks && <PageControls offset={offset} hasMore={tracks.hasMore} total={tracks.total} change={changeOffset} disabled={locked || loading} />}
     </> : <>
       <div className="song-list" aria-label={roomOnly ? '房间歌单目录' : providerName(provider) + '歌单列表'}>
         {(roomOnly ? playlists.entries : list?.items || []).map(playlist => {
@@ -194,8 +206,10 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
 }
 export default function PlaylistBrowser({ roomOnly = false }: { roomOnly?: boolean }) {
   const [provider, setProvider] = useState<MusicProvider>('netease');
+  const [neteaseBusy, setNeteaseBusy] = useState(false);
+  const [qqmusicBusy, setQqmusicBusy] = useState(false);
   if (roomOnly) return <ProviderLibrary roomOnly />;
   return <div><div className={styles.tabs} role="tablist" aria-label="音乐平台">
-    {(['netease','qqmusic'] as const).map(value => <button key={value} role="tab" aria-selected={provider === value} className={provider === value ? styles.selected : ''} onClick={() => setProvider(value)}>{providerName(value)}</button>)}
-  </div>{(['netease','qqmusic'] as const).map(value => <div key={value} role="tabpanel" hidden={provider !== value}><ProviderLibrary provider={value} visible={provider === value} /></div>)}</div>;
+    {(['netease','qqmusic'] as const).map(value => <button key={value} role="tab" aria-selected={provider === value} disabled={neteaseBusy || qqmusicBusy} className={provider === value ? styles.selected : ''} onClick={() => setProvider(value)}>{providerName(value)}</button>)}
+  </div>{(['netease','qqmusic'] as const).map(value => <div key={value} role="tabpanel" hidden={provider !== value}><ProviderLibrary provider={value} visible={provider === value} onBusyChange={value === 'netease' ? setNeteaseBusy : setQqmusicBusy} /></div>)}</div>;
 }

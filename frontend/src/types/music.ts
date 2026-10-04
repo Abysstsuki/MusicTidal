@@ -1,4 +1,9 @@
 export type MusicProvider = 'netease' | 'qqmusic';
+export interface SongReference { provider: MusicProvider; id: number }
+export interface BatchQueueFailure extends SongReference { code: string; message: string }
+export interface BatchQueueResult {
+  success: true; added: QueueSong[]; failed: BatchQueueFailure[]; duplicateCount: number;
+}
 export const providerName = (provider?: MusicProvider) => provider === 'qqmusic' ? 'QQ 音乐' : '网易云';
 export const songKey = (song: Pick<Song, 'id' | 'provider'>) => `${song.provider || 'netease'}:${song.id}`;
 export interface Song {

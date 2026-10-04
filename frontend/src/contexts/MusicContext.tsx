@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { quietRhythm, type RhythmReader } from '@/lib/audio-rhythm';
-import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song } from '@/types/music';
+import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song, SongReference, BatchQueueResult } from '@/types/music';
 import { providerName } from '@/types/music';
 import type { RoomInfo, RoomState } from '@/types/room';
 import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
@@ -22,6 +22,7 @@ interface MusicContextType {
   playlistAction: (path: string, body?: object, method?: string) => Promise<void>;
   setCurrentSong: (song: Song | null) => void; setCurrentPosition: (position: number) => void; setIsPlaying: (playing: boolean) => void;
   syncPlayback: () => Promise<void>; skipNext: () => Promise<void>; enqueue: (song: Song) => Promise<void>;
+  enqueueBatch: (songs: SongReference[]) => Promise<BatchQueueResult>;
   moveToTop: (instanceId: number) => Promise<void>; removeFromQueue: (instanceId: number) => Promise<void>;
   startRecommendations: (provider?: import('@/types/music').MusicProvider) => Promise<void>; stopRecommendations: () => Promise<void>; sendChat: (text: string) => void;
   login: (username: string, token: string) => void; leaveRoom: () => Promise<void>;
@@ -176,6 +177,13 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const enqueue = async (song: Song) => {
     await mutateQueue('add', { song });
   };
+  const enqueueBatch = async (songs: SongReference[]) => {
+    const result = await requestRoom<BatchQueueResult>('/queue/add-batch', { method: 'POST', body: JSON.stringify({ songs }) });
+    // The mutation result is authoritative even if a later snapshot request fails.
+    // WebSocket events already synchronize the queue; never turn an accepted batch into a retry.
+    void syncPlayback().catch(() => {});
+    return result;
+  };
   const playlistAction = async (path: string, body: object = {}, method = 'POST') => {
     await requestRoom('/playlists' + path, { method, body: method === 'DELETE' ? undefined : JSON.stringify(body) });
     await syncPlayback();
@@ -203,6 +211,6 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision,
     connection, queue, recommendations, playlists, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id,
     playlistAction, setPlaybackMode: mode => mutateQueue('mode', { mode }),
-    setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue,
+    setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, enqueueBatch, moveToTop, removeFromQueue,
     startRecommendations: provider => setRecommendationMode(true, provider), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
 }

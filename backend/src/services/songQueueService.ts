@@ -103,9 +103,14 @@ export class SongQueueService {
   private broadcastPlaylists() { this.emit({ type: 'PLAYLIST_STATE_UPDATED', payload: this.getPlaylistState() }); }
 
   enqueue(song: Song) {
-    if (this.disposed) throw new Error('房间已结束');
-    const added: SongWithInstance = { ...song, instanceId: ++this.currentInstanceId, source: 'manual' };
-    this.queue.push(added);
+    return this.enqueueMany([song])[0];
+  }
+
+  enqueueMany(songs: Song[]): SongWithInstance[] {
+    this.assertAlive();
+    if (!songs.length) return [];
+    const added = songs.map(song => ({ ...song, instanceId: ++this.currentInstanceId, source: 'manual' as const }));
+    this.queue.push(...added);
     this.broadcastQueue();
     void this.startNextSongIfIdle();
     return added;

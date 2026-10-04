@@ -5,6 +5,9 @@ import VerticalAlignTopRounded from '@mui/icons-material/VerticalAlignTopRounded
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import QueueMusicRounded from '@mui/icons-material/QueueMusicRounded';
 import FavoriteRounded from '@mui/icons-material/FavoriteRounded';
+import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
+import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
+import CheckRounded from '@mui/icons-material/CheckRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
 import { useToast } from '@/contexts/ToastContext';
 import SongCover from './modelItem/SongCover';
@@ -45,6 +48,8 @@ function RegularQueue() {
   const { showToast } = useToast();
   const [pending, setPending] = useState<number | null>(null);
   const [modePending, setModePending] = useState<'start' | 'stop' | null>(null);
+  const [lastProvider, setLastProvider] = useState<MusicProvider | null>(recommendations.provider || null);
+  useEffect(() => { if (recommendations.enabled && recommendations.provider) setLastProvider(recommendations.provider); }, [recommendations.enabled, recommendations.provider]);
   const modeActionVersion = useRef(0);
   const perform = async (id: number, action: () => Promise<void>, message: string) => {
     setPending(id);
@@ -63,27 +68,48 @@ function RegularQueue() {
     catch (err) { if (version === modeActionVersion.current && (err as Error).name !== 'AbortError') showToast((err as Error).message, { id: 'heart-error-' + room?.id, tone: 'error' }); }
     finally { if (version === modeActionVersion.current) setModePending(null); }
   };
+  const selectedProvider = recommendations.enabled ? recommendations.provider || 'netease' : 'off';
+  const sources = [
+    { provider: 'netease', name: '网易云', label: '网易云心动', description: '心动模式', binding: room?.binding.status },
+    { provider: 'qqmusic', name: 'QQ 音乐', label: 'QQ 漫游', description: '猜你喜欢', binding: room?.bindings?.qqmusic.status },
+  ] as const;
+  const resumeProvider = sources.find(source => source.provider === (recommendations.provider || lastProvider) && source.binding === 'bound')?.provider
+    || sources.find(source => source.binding === 'bound')?.provider;
   const label = recommendations.provider === 'qqmusic' ? 'QQ 漫游' : '网易云心动';
-  const recommendationStatus = recommendations.loading ? '正在获取推荐…'
-    : recommendations.enabled ? label + (recommendations.paused ? ' · 已暂停' : ' · 续播中') : '推荐续播';
+  const recommendationStatus = modePending ? '正在切换'
+    : recommendations.loading ? '获取推荐中'
+    : recommendations.enabled ? recommendations.paused ? '已暂停' : '续播中' : '已关闭';
   return <div className={styles.content + ' ' + playlistStyles.regular}>
-    <div className={styles.card + (recommendations.enabled ? ' ' + styles.enabled : '')}>
+    <div className={styles.card} aria-busy={modePending !== null}>
       <div className={styles.heading}>
-        <FavoriteRounded />
-        <strong role="status">{recommendationStatus}</strong>
-        <select className={styles.toggle} aria-label="推荐来源" value={recommendations.enabled ? recommendations.provider || 'netease' : 'off'}
-          disabled={!isHost || modePending !== null} onChange={event => void toggleRecommendations(event.target.value as MusicProvider | 'off')}>
-          <option value="off">关闭</option>
-          <option value="netease" disabled={room?.binding.status !== 'bound'}>网易云心动</option>
-          <option value="qqmusic" disabled={room?.bindings?.qqmusic.status !== 'bound'}>QQ 漫游</option>
-        </select>
+        <span className={styles.headingIcon}><AutoAwesomeRounded /></span>
+        <div className={styles.headingCopy}>
+          <strong>推荐续播</strong>
+          <span className={styles.status + (modePending || recommendations.loading ? ' ' + styles.statusPending : recommendations.enabled && !recommendations.paused ? ' ' + styles.statusActive : '')} role="status">{recommendationStatus}</span>
+        </div>
+        <button type="button" className={styles.switch} role="switch" aria-label="自动推荐续播" aria-checked={recommendations.enabled}
+          disabled={!isHost || modePending !== null || (!recommendations.enabled && !resumeProvider)}
+          title={!isHost ? '由房主控制推荐续播' : recommendations.enabled ? '关闭推荐续播' : resumeProvider ? '开启推荐续播' : '房主需先绑定音乐账号'}
+          onClick={() => { if (recommendations.enabled) void toggleRecommendations('off'); else if (resumeProvider) void toggleRecommendations(resumeProvider); }} />
       </div>
-      <p>手动点歌优先；切换来源后，当前歌曲继续播完。</p>
-      <span>{isHost ? '选择一个已绑定平台提供推荐；歌单模式下暂停补充。' : '由房主选择推荐来源 · 所有人同步收听'}</span>
+      <div className={styles.sources} role="group" aria-label="推荐来源">
+        {sources.map(({ provider, name, label: sourceLabel, description, binding }) => <button key={provider} type="button"
+          className={styles.sourceCard + ' ' + styles[provider] + (selectedProvider === provider ? ' ' + styles.selected : '')}
+          aria-label={sourceLabel} aria-pressed={selectedProvider === provider} disabled={!isHost || modePending !== null || binding !== 'bound'}
+          title={binding !== 'bound' ? '房主需绑定有效的' + name + '账号' : !isHost ? '由房主选择推荐来源' : '开启' + sourceLabel}
+          onClick={() => { if (selectedProvider !== provider) void toggleRecommendations(provider); }}>
+          <span className={styles.sourceIcon}>{provider === 'netease' ? <FavoriteRounded /> : <GraphicEqRounded />}</span>
+          <span className={styles.sourceCopy}><strong>{name}</strong><span>{binding === 'bound' ? description : binding === 'expired' ? '授权已过期' : '尚未绑定'}</span></span>
+          <span className={styles.sourceCheck} aria-hidden="true">{selectedProvider === provider && <CheckRounded />}</span>
+        </button>)}
+      </div>
+      <p className={styles.description}>手动点歌优先 · 切换不打断当前歌曲</p>
+      {!isHost && <p className={styles.hint}>由房主选择推荐来源 · 所有人同步收听</p>}
+      {recommendations.paused && <p className={styles.hint}>歌单模式下暂停推荐补充</p>}
       {recommendations.error && <p className="inline-error" role="status">{recommendations.error}</p>}
     </div>
     <div className="song-list">
-      {!queue.length && <div className="panel-empty"><QueueMusicRounded /><p>{recommendations.enabled ? '正在补充心动推荐' : '暂无待播歌曲'}</p><span>{recommendations.enabled ? '点歌后会优先播放' : '可以点歌或开启心动模式'}</span></div>}
+      {!queue.length && <div className="panel-empty"><QueueMusicRounded /><p>{recommendations.enabled ? '正在补充' + label : '暂无待播歌曲'}</p><span>{recommendations.enabled ? '点歌后会优先播放' : '可以点歌，或开启推荐续播'}</span></div>}
       {queue.map((song, index) => <div className="song-row" key={song.instanceId}>
         <span className="song-index">{String(index + 1).padStart(2, '0')}</span>
         <SongCover src={song.prcUrl} />

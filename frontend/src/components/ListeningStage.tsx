@@ -32,7 +32,7 @@ function StageBackground({ src }: { src?: string }) {
 }
 
 export default function ListeningStage() {
-  const { currentSong, connection, queue, room, isHost, leaveRoom, syncPlayback } = useMusicContext();
+  const { currentSong, connection, queue, room, user, isHost, leaveRoom, syncPlayback } = useMusicContext();
   const { showToast } = useToast();
   const [showBinding, setShowBinding] = useState(false);
   const previousHostDeadline = useRef(room?.hostDisconnectedUntil);
@@ -46,7 +46,7 @@ export default function ListeningStage() {
   const requestLeave = () => { if (!leaving) { setLeaveError(''); setShowLeave(true); } };
   const leave = async () => { if (leaving) return; setLeaving(true); setLeaveError(''); try { await leaveRoom(); } catch (error) { setLeaveError((error as Error).message); setLeaving(false); } };
   const invite = async () => {
-    if (!room) return;
+    if (!room || !user) return;
     if (room.locked && !room.inviteToken) {
       showToast('邀请信息尚未就绪，请刷新房间后重试', { tone: 'error' });
       return;
@@ -55,7 +55,7 @@ export default function ListeningStage() {
       const link = new URL('/room', window.location.origin);
       link.searchParams.set('roomId', room.id);
       if (room.locked && room.inviteToken) link.hash = new URLSearchParams({ inviteToken: room.inviteToken }).toString();
-      await navigator.clipboard.writeText('点击加入MusicParty，' + link.href);
+      await navigator.clipboard.writeText(`【${user.username}】邀请你加入【${room.name}】一起听歌，${link.href}`);
       showToast('邀请链接已复制', { tone: 'success' });
     } catch { showToast('复制失败，请重试', { tone: 'error' }); }
   };

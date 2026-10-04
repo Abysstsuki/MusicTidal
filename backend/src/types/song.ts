@@ -1,4 +1,9 @@
 export type MusicProvider = 'netease' | 'qqmusic';
+export interface SongReference { provider: MusicProvider; id: number }
+export interface BatchQueueFailure extends SongReference { code: string; message: string }
+export interface BatchQueueResult {
+  success: true; added: SongWithInstance[]; failed: BatchQueueFailure[]; duplicateCount: number;
+}
 export type MusicAccess = 'free' | 'vip' | 'paid' | 'quality' | 'unknown';
 export interface PlayInfo {
   url: string; time: number; trial?: boolean; lyricOffset?: number; audioOffset?: number;

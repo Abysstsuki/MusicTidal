@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { roomManager } from '../services/roomManager';
 import { HttpError } from '../utils/httpError';
-import type { Song } from '../types/song';
+import { songKey, type Song, type SongReference, type BatchQueueFailure, type BatchQueueResult } from '../types/song';
 import { musicProvider, neteaseSong, qqSong } from '../services/music/song';
 
 function roomFor(req: Request) { return roomManager.member(String(req.params.roomId), (req as AuthRequest).user!.userId); }
@@ -33,6 +33,69 @@ export const addSongToQueue = async (req: Request, res: Response) => {
   room.requireProvider(provider);
   if (room.closed || version !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) throw new HttpError(409, '房主授权已变化，请重新点歌');
   res.json({ success: true, song: room.queue.enqueue(song) });
+};
+
+export const addSongsToQueue = async (req: Request, res: Response) => {
+  const raw = req.body?.songs;
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 100 || raw.some(item =>
+    !item || !Number.isSafeInteger(item.id) || item.id <= 0 || !['netease', 'qqmusic'].includes(item.provider))) {
+    throw new HttpError(400, '每批请选择 1～100 首歌曲，并提供有效的平台和歌曲编号', 'INVALID_BATCH_SONGS');
+  }
+  const unique = new Map<string, SongReference>();
+  for (const item of raw) unique.set(songKey(item), { provider: item.provider, id: item.id });
+  const references = [...unique.values()], room = roomFor(req);
+  const prepared = new Map<string, Song>();
+  const failures = new Map<string, BatchQueueFailure>();
+  const versions = { netease: room.credentialVersion, qqmusic: room.qqmusicVersion };
+  const reject = (reference: SongReference, code: string, message: string) => {
+    failures.set(songKey(reference), { ...reference, code, message });
+  };
+  await Promise.all((['netease', 'qqmusic'] as const).map(async provider => {
+    const items = references.filter(item => item.provider === provider);
+    if (!items.length) return;
+    try {
+      room.requireProvider(provider);
+      const ids = items.map(item => item.id);
+      let metadata: any[], privileges: any[] = [];
+      if (provider === 'qqmusic') metadata = await room.qqmusicClient.details(ids);
+      else {
+        const { data } = await room.client.get('/song/detail', { params: { ids: ids.join(',') } });
+        if (!Array.isArray(data?.songs)) throw new Error('Invalid song details');
+        metadata = data.songs; privileges = data.privileges || [];
+      }
+      const byId = new Map(metadata.map(item => [Number(item.id || item.songid), item]));
+      const rights = new Map(privileges.map(item => [Number(item.id), item]));
+      for (const reference of items) {
+        const detail = byId.get(reference.id);
+        if (!detail) { reject(reference, 'SONG_UNAVAILABLE', '歌曲不存在或详情暂不可用'); continue; }
+        try {
+          const song = provider === 'qqmusic' ? qqSong(detail) : neteaseSong(detail, rights.get(reference.id));
+          if (!song.name.trim() || song.id !== reference.id) throw new Error('Invalid song');
+          prepared.set(songKey(reference), song);
+        } catch { reject(reference, 'SONG_UNAVAILABLE', '歌曲详情暂不可用'); }
+      }
+    } catch (error) {
+      const reason = error instanceof HttpError ? error.message : '歌曲详情服务暂不可用，请稍后重试';
+      const code = error instanceof HttpError ? error.code || 'MUSIC_UNAVAILABLE' : 'MUSIC_UNAVAILABLE';
+      for (const reference of items) reject(reference, code, reason);
+    }
+  }));
+  // No songs are committed until all cloud requests finish and membership is rechecked.
+  const currentRoom = roomFor(req);
+  if (currentRoom !== room || room.closed) throw new HttpError(404, '房间已结束', 'ROOM_CLOSED');
+  for (const reference of references) {
+    const provider = reference.provider;
+    if (versions[provider] !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) {
+      reject(reference, 'MUSIC_AUTHORIZATION_CHANGED', '房主授权已变化，请重试');
+    } else if (room.bindingFor(provider).status !== 'bound') {
+      reject(reference, 'MUSIC_BINDING_REQUIRED', `房主尚未有效绑定${provider === 'qqmusic' ? 'QQ 音乐' : '网易云'}`);
+    }
+  }
+  const songs = references.flatMap(item => !failures.has(songKey(item)) && prepared.has(songKey(item)) ? [prepared.get(songKey(item))!] : []);
+  const result: BatchQueueResult = { success: true, added: room.queue.enqueueMany(songs),
+    failed: references.flatMap(item => failures.has(songKey(item)) ? [failures.get(songKey(item))!] : []),
+    duplicateCount: raw.length - references.length };
+  res.json(result);
 };
 export const getQueue = (req: Request, res: Response) => {
   const room = roomFor(req); res.json({ queue: room.queue.getQueue(), recommendations: room.queue.getRecommendationState(), revision: room.revision });
