@@ -7,6 +7,7 @@ import CheckRounded from '@mui/icons-material/CheckRounded';
 import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import type { Song, SongSearchResponse } from '@/types/music';
 import SongCover from './modelItem/SongCover';
 import { formatDuration } from './musicplayer';
@@ -15,6 +16,7 @@ const PAGE_SIZE = 10;
 
 export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const { enqueue, requestRoom } = useMusicContext();
+  const { showToast } = useToast();
   const [query, setQuery] = useState('');
   const [keyword, setKeyword] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
@@ -22,7 +24,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  useToastMessage(error, { tone: 'error' });
   const [pending, setPending] = useState<number | null>(null);
   const [added, setAdded] = useState<number | null>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -34,7 +36,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    setLoading(true); setError(''); setNotice(''); setKeyword(term); setPage(nextPage);
+    setLoading(true); setError(''); setKeyword(term); setPage(nextPage);
     try {
       const data = await requestRoom<SongSearchResponse>('/netease/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
       if (!data.success) throw new Error('歌曲暂时无法搜索，请稍后重试');
@@ -44,9 +46,9 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     } finally { if (!controller.signal.aborted) setLoading(false); }
   };
   const add = async (song: Song) => {
-    setPending(song.id); setError(''); setNotice('');
-    try { await enqueue(song); setAdded(song.id); setNotice('已加入待播 · ' + song.name); }
-    catch (err) { setError((err as Error).message); }
+    setPending(song.id); setError('');
+    try { await enqueue(song); setAdded(song.id); showToast('已加入待播 · ' + song.name, { tone: 'success' }); }
+    catch (err) { if ((err as Error).name !== 'AbortError') setError((err as Error).message); }
     finally { setPending(null); }
   };
   const submit = (event: FormEvent) => { event.preventDefault(); void search(query.trim()); };
@@ -57,8 +59,6 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
       <input ref={inputRef} aria-label="搜索歌曲或歌手" placeholder="搜索歌曲或歌手…" value={query} onChange={event => setQuery(event.target.value)} maxLength={100} />
       <button type="submit" disabled={loading || !query.trim()}>{loading ? '搜索中' : '搜索'}</button>
     </form>
-    {error && <p className="inline-error" role="status">{error}</p>}
-    {notice && <p className="inline-success" role="status">{notice}</p>}
     <div className="song-list" aria-busy={loading}>
       {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '搜索歌曲'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map(song => <div className="song-row" key={song.id}>
         <SongCover src={song.prcUrl} /><div className="song-row-info"><strong>{song.name}</strong><span>{song.artist} · {formatDuration(song.duration)}</span></div>

@@ -21,7 +21,6 @@ export default function ActiveRoomChoice({ room, onLeft }: { room: RoomSummary; 
     {isHost && <p className="panel-description">房主离开后，原房间保留 {(room.hostGracePeriodMs || 180000) / 60000} 分钟，到期自动销毁。</p>}
     <div className="dialog-actions"><a className="pill-button" href={'/room?roomId=' + room.id}>返回原房间</a>
       <button className="pill-button" disabled={busy} onClick={() => { setError(''); setConfirming(true); }}>{busy ? '正在离开…' : '离开原房间'}</button></div>
-    {error && <p className="inline-error" role="alert">{error}</p>}
     {confirming && <LeaveRoomDialog name={room.name} isHost={isHost} graceMs={room.hostGracePeriodMs} busy={busy} error={error} onClose={() => setConfirming(false)} onConfirm={() => void leave()} />}
   </div>;
 }

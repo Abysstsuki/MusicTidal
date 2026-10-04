@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Noto_Sans_SC } from 'next/font/google';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useToastMessage } from '@/contexts/ToastContext';
 import CurvedLyrics from '@/components/curvedlyrics';
 
 const lyricsFont = Noto_Sans_SC({
@@ -35,6 +36,7 @@ export default function MusicLyrics() {
   const [translations, setTranslations] = useState<LyricLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  useToastMessage(failed ? '歌词暂时无法加载，请稍后重试' : '', { tone: 'error' });
   const songId = currentSong?.id;
   useEffect(() => {
     setLyrics([]); setTranslations([]); setFailed(false);
@@ -59,7 +61,7 @@ export default function MusicLyrics() {
   const translation = active ? translations.find(line => Math.abs(line.time - active.time) < 0.15)?.text : '';
   if (!currentSong) return null;
   const before = lyrics[index - 1]?.text || '';
-  const center = loading ? '正在寻找这一句…' : active?.text || (failed ? '歌词暂时无法加载' : '暂无歌词');
+  const center = loading ? '正在寻找这一句…' : active?.text || '暂无歌词';
   const after = lyrics[index + 1]?.text || '';
   return (
     <CurvedLyrics before={before} center={center} after={after}

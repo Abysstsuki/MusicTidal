@@ -7,6 +7,7 @@ import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import { apiRequest, ApiError } from '@/lib/api';
 import type { RoomSummary } from '@/types/room';
 import UserInfo from '@/components/userinfo';
@@ -18,10 +19,10 @@ import RoomActionDialog, { type RoomAction } from '@/components/RoomActionDialog
 
 export default function Home() {
   const auth = useAuth();
+  const { showToast } = useToast();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [notice, setNotice] = useState('');
   const [filter, setFilter] = useState('');
   const [action, setAction] = useState<RoomAction | null>(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -31,6 +32,7 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useToastMessage(loadError, { id: 'lobby-load-error', tone: 'error' });
   const sequence = useRef(0);
   const authCompleted = useRef(false);
   const refresh = useCallback(async (signal?: AbortSignal) => {
@@ -43,11 +45,13 @@ export default function Home() {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setNotice(sessionStorage.getItem('room-notice') || ''); sessionStorage.removeItem('room-notice');
+    const notice = sessionStorage.getItem('room-notice');
+    if (notice) showToast(notice, { id: 'room-exit', tone: 'info', duration: 5000 });
+    sessionStorage.removeItem('room-notice');
     void refresh(controller.signal);
     const interval = setInterval(() => void refresh(controller.signal), 10000);
     return () => { controller.abort(); clearInterval(interval); };
-  }, [refresh]);
+  }, [refresh, showToast]);
   useEffect(() => {
     setActive(null);
     if (!auth.user) return;
@@ -90,11 +94,9 @@ export default function Home() {
   return <main className="room-lobby">
     <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">多人同步听歌</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}<UserInfo /></div></header>
     <section className="lobby-intro"><div><p className="eyebrow">ROOM LOBBY</p><h1>房间大厅</h1><p>选择房间加入，或创建新的房间。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
-    {notice && <p className="lobby-notice" role="status">{notice}</p>}
-    {auth.error && <p className="inline-error" role="alert">{auth.error} <button className="pill-button" onClick={auth.retry}>重试登录状态</button></p>}
+    {auth.error && <button className="pill-button" onClick={auth.retry}>重试登录状态</button>}
     {active && !action && <ActiveRoomChoice room={active} onLeft={() => { setActive(null); void refresh(); }} />}
     <section className="lobby-rooms" aria-label="房间列表"><div className="lobby-list-heading"><h2>房间 <span>{rooms.length}</span></h2><div><input aria-label="搜索房间" placeholder="搜索房间或房主" value={filter} onChange={event => setFilter(event.target.value)} /><button className="icon-button" aria-label="刷新房间列表" onClick={() => void refresh()}><RefreshRounded /></button></div></div>
-      {loadError && <p className="inline-error" role="alert">{loadError}</p>}
       {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <article className="room-card" key={room.id}>
         <div className="room-card-heading"><span className="room-listening"><HeadphonesRounded fontSize="small" />{room.onlineCount} 人在线</span>{room.locked && <span className="room-lock"><LockOutlined fontSize="small" />密码房间</span>}</div>
         <h2>{room.name}</h2><p className="room-host">房主 · {room.host.username}</p>

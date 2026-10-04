@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
@@ -16,8 +16,8 @@ import UserInfo from '@/components/userinfo';
 import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useToast } from '@/contexts/ToastContext';
 import NeteaseBinding from './NeteaseBinding';
-import StageToast from './StageToast';
 import LeaveRoomDialog from './LeaveRoomDialog';
 import RoomClosureNotice from './RoomClosureNotice';
 
@@ -31,11 +31,14 @@ function StageBackground({ src }: { src?: string }) {
 }
 
 export default function ListeningStage() {
-  const { currentSong, connection, queue, room, isHost, leaveRoom, notice, syncPlayback } = useMusicContext();
+  const { currentSong, connection, queue, room, isHost, leaveRoom, syncPlayback } = useMusicContext();
+  const { showToast } = useToast();
   const [showBinding, setShowBinding] = useState(false);
-  const [toast, setToast] = useState<{ id: number; message: string; error?: boolean } | null>(null);
-  const toastSequence = useRef(0);
-  const dismissToast = useCallback(() => setToast(null), []);
+  const previousHostDeadline = useRef(room?.hostDisconnectedUntil);
+  useEffect(() => {
+    if (previousHostDeadline.current && !room?.hostDisconnectedUntil) showToast('房主已返回，房间销毁倒计时已取消', { tone: 'success' });
+    previousHostDeadline.current = room?.hostDisconnectedUntil;
+  }, [room?.hostDisconnectedUntil, showToast]);
   const [showLeave, setShowLeave] = useState(false);
   const [leaveError, setLeaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -44,7 +47,7 @@ export default function ListeningStage() {
   const invite = async () => {
     if (!room) return;
     if (room.locked && !room.inviteToken) {
-      setToast({ id: ++toastSequence.current, message: '邀请信息尚未就绪，请刷新房间后重试', error: true });
+      showToast('邀请信息尚未就绪，请刷新房间后重试', { tone: 'error' });
       return;
     }
     try {
@@ -52,8 +55,8 @@ export default function ListeningStage() {
       link.searchParams.set('roomId', room.id);
       if (room.locked && room.inviteToken) link.hash = new URLSearchParams({ inviteToken: room.inviteToken }).toString();
       await navigator.clipboard.writeText('点击加入MusicParty，' + link.href);
-      setToast({ id: ++toastSequence.current, message: '邀请链接已复制' });
-    } catch { setToast({ id: ++toastSequence.current, message: '复制失败，请手动复制地址栏中的房间链接', error: true }); }
+      showToast('邀请链接已复制', { tone: 'success' });
+    } catch { showToast('复制失败，请重试', { tone: 'error' }); }
   };
   const [panel, setPanel] = useState<Panel>('chat');
   const [showLyrics, setShowLyrics] = useState(true);
@@ -132,9 +135,8 @@ export default function ListeningStage() {
           {isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
           <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
         </div>
-        {room?.hostDisconnectedUntil && <RoomClosureNotice deadline={room.hostDisconnectedUntil} />}
-        {notice && <div className="room-banner" role="status">{notice}</div>}
       </div>
+      {room?.hostDisconnectedUntil && <RoomClosureNotice deadline={room.hostDisconnectedUntil} roomId={room.id} />}
 
       <section className="track-heading" aria-label="当前歌曲">
         <p className="eyebrow">NOW PLAYING</p>
@@ -166,7 +168,6 @@ export default function ListeningStage() {
       )}
 
       <MusicPlayer showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(value => !value)} />
-      {toast && <StageToast key={toast.id} message={toast.message} error={toast.error} onDismiss={dismissToast} />}
       {showLeave && <LeaveRoomDialog name={room?.name || '当前房间'} isHost={isHost} graceMs={room?.hostGracePeriodMs} busy={leaving} error={leaveError} onClose={() => setShowLeave(false)} onConfirm={() => void leave()} />}
       {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} onChanged={syncPlayback} />}
     </main>

@@ -8,6 +8,7 @@ import GraphicEqRounded from '@mui/icons-material/GraphicEqRounded';
 import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import type { RoomSummary } from '@/types/room';
+import { useToastMessage } from '@/contexts/ToastContext';
 import ActiveRoomChoice from './ActiveRoomChoice';
 import StageDialog from './StageDialog';
 
@@ -32,10 +33,10 @@ export default function RoomActionDialog({ action, active, name, password, busy,
   const creating = action.kind === 'create';
   const room = action.kind === 'join' ? action.room : null;
   const switching = !!active && (creating || active.id !== room?.id);
+  useToastMessage(switching ? '' : error, { tone: 'error' });
   const formAction = creating || room?.locked;
   const close = () => { if (!busy) onClose(); };
   const footer = <div className="room-dialog-footer">
-    {error && <p className="room-dialog-error" role="alert">{error}</p>}
     <div className="room-dialog-actions">
       <button className="pill-button" type="button" disabled={busy} onClick={close}>取消</button>
       <button className="primary-button" type={formAction ? 'submit' : 'button'} disabled={busy} onClick={formAction ? undefined : onJoin}>
@@ -56,7 +57,7 @@ export default function RoomActionDialog({ action, active, name, password, busy,
     {room && <div className="room-dialog-meta"><span className="room-dialog-host">房主 · {room.host.username}</span><span>{room.onlineCount} 人在线</span><span className="room-dialog-access">{room.locked ? '密码保护' : '开放房间'}</span></div>}
     <p className="room-dialog-description">{switching ? '你已加入另一个房间，请先选择接下来的操作。' : creating ? '给房间起个名字，邀请朋友一起听歌。' : room?.locked ? '输入房间密码，加入大家的同步播放。' : '与房间成员同步听歌，共享队列和聊天。'}</p>
 
-    {switching && active ? <><ActiveRoomChoice room={active} onLeft={onLeft} />{error && <p className="room-dialog-error" role="alert">{error}</p>}</> : creating ? <form className="room-dialog-form" onSubmit={onCreate}>
+    {switching && active ? <ActiveRoomChoice room={active} onLeft={onLeft} /> : creating ? <form className="room-dialog-form" onSubmit={onCreate}>
       <label>房间名称<input required maxLength={60} disabled={busy} value={name} onChange={event => onNameChange(event.target.value)} placeholder="给房间起个名字" /></label>
       <label><span>房间密码 <small>可选</small></span><input type="password" autoComplete="new-password" disabled={busy} value={password} onChange={event => onPasswordChange(event.target.value)} placeholder="留空即可自由加入" /></label>
       <p className="room-dialog-hint">创建后你将成为房主，网易云账号可稍后绑定。</p>

@@ -6,6 +6,7 @@ import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Son
 import type { RoomInfo, RoomState } from '@/types/room';
 import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
 import { useAuth } from './AuthContext';
+import { useToast, useToastMessage } from './ToastContext';
 
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 interface MusicContextType {
@@ -13,7 +14,7 @@ interface MusicContextType {
   currentSong: Song | null; currentPosition: number; isPlaying: boolean; audioUrl: string; startTime: number;
   playbackRevision: number; connection: Connection; queue: QueueSong[]; recommendations: RecommendationState;
   messages: ChatMessage[]; onlineUsers: string[]; user: { id?: number; username: string } | null;
-  room: RoomInfo | null; isHost: boolean; notice: string;
+  room: RoomInfo | null; isHost: boolean;
   setCurrentSong: (song: Song | null) => void; setCurrentPosition: (position: number) => void; setIsPlaying: (playing: boolean) => void;
   syncPlayback: () => Promise<void>; skipNext: () => Promise<void>; enqueue: (song: Song) => Promise<void>;
   moveToTop: (instanceId: number) => Promise<void>; removeFromQueue: (instanceId: number) => Promise<void>;
@@ -43,6 +44,7 @@ export function useMusicContext() {
 
 export function MusicProvider({ children, initialState }: { children: ReactNode; initialState: RoomState }) {
   const auth = useAuth();
+  const { showToast } = useToast();
   const roomId = initialState?.room.id || '';
   const user = auth.user;
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -59,7 +61,14 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const [recommendations, setRecommendations] = useState<RecommendationState>(initialState?.recommendations || idleRecommendations);
   const [messages, setMessages] = useState<ChatMessage[]>(initialState.messages || []);
   const [onlineUsers, setOnlineUsers] = useState<string[]>(initialState.members.map(member => member.username) || []);
-  const [notice, setNotice] = useState('');
+  useToastMessage(recommendations.error, { id: 'heart-error-' + roomId, tone: 'error' });
+  useToastMessage(room?.binding.status === 'expired' ? '房主网易云授权已过期，请重新扫码绑定；当前使用游客授权' : '', { id: 'room-authorization-' + roomId, tone: 'warning', duration: 6000 });
+  useToastMessage(connection === 'reconnecting' || connection === 'offline' ? '连接已断开，正在尝试重新连接' : '', { id: 'room-connection-' + roomId, tone: 'warning', duration: null });
+  const previousConnection = useRef(connection);
+  useEffect(() => {
+    if (previousConnection.current === 'reconnecting' && connection === 'connected') showToast('连接已恢复', { tone: 'success' });
+    previousConnection.current = connection;
+  }, [connection, showToast]);
   const socketRef = useRef<WebSocket | null>(null);
   const revision = useRef(initialState?.revision || 0);
   const serverPlaybackRevision = useRef(initialState?.playback.playbackRevision || 0);
@@ -124,13 +133,13 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
           if (data.type === 'ERROR') {
             if (data.payload?.code === 'AUTH_EXPIRED') { window.dispatchEvent(new Event('auth-expired')); exit(data.payload.error); }
             else if (data.payload?.code === 'ROOM_CLOSED' || data.payload?.code === 'NOT_MEMBER') exit(data.payload.error);
-            else setNotice(data.payload?.error || '操作失败');
+            else showToast(data.payload?.error || '操作失败', { tone: 'error' });
             return;
           }
           if (data.roomId !== roomId) return;
           if (data.type === 'ROOM_CLOSED') { exit(data.payload.reason); return; }
           if (data.revision < revision.current) return;
-          if (data.type === 'ROOM_SNAPSHOT') { applyState(data.payload); retry = 0; setConnection('connected'); setNotice(''); return; }
+          if (data.type === 'ROOM_SNAPSHOT') { applyState(data.payload); retry = 0; setConnection('connected'); return; }
           revision.current = data.revision;
           if (data.type === 'PLAY_SONG') applyPlayback(data.payload);
           else if (data.type === 'QUEUE_UPDATED') setQueue(data.payload);
@@ -150,7 +159,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     };
     connect();
     return () => { cancelled = true; clearTimeout(timer); socketRef.current = null; socket?.close(); };
-  }, [auth.token, roomId, exit, applyState, applyPlayback]);
+  }, [auth.token, roomId, exit, applyState, applyPlayback, showToast]);
   const mutateQueue = async (action: string, body: object = {}) => {
     await requestRoom('/queue/' + action, { method: 'POST', body: JSON.stringify(body) }); await syncPlayback();
   };
@@ -178,7 +187,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     await requestRoom('/leave', { method: 'POST' }); exit('已离开房间');
   };
   return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision,
-    connection, queue, recommendations, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id, notice,
+    connection, queue, recommendations, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id,
     setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue,
     startRecommendations: () => setRecommendationMode(true), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
 }

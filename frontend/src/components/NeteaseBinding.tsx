@@ -6,6 +6,7 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
 import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
 import { apiRequest, ApiError } from '@/lib/api';
+import { useToastMessage } from '@/contexts/ToastContext';
 import type { NeteaseBinding as Binding } from '@/types/room';
 import StageDialog from './StageDialog';
 
@@ -15,6 +16,8 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
   const [qr, setQr] = useState<Qr | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  useToastMessage(error, { tone: 'error' });
+  useToastMessage(status, { tone: status.includes('过期') ? 'warning' : status.includes('成功') || status.includes('解除') ? 'success' : 'info' });
   const [busy, setBusy] = useState(false);
   const session = useRef<string | null>(null);
   const mounted = useRef(true);
@@ -104,12 +107,9 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
       <div className="netease-qr-instructions">
         <strong>使用网易云音乐 App 扫码</strong>
         <span>扫码后请在手机上确认，绑定完成后会自动更新。</span>
-        <p role="status">{status || '等待扫码'}</p>
       </div>
     </div>}
 
-    {!qr && status && <p role="status" className="netease-feedback">{status}</p>}
-    {error && <p className="inline-error netease-error" role="alert">{error}</p>}
 
     <div className="dialog-actions netease-actions">
       <button className="primary-button" disabled={busy} onClick={() => void createQr()}><QrCode2Rounded fontSize="small" />{busy ? '正在准备二维码…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定'}</button>

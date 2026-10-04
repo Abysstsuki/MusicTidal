@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import SendRounded from '@mui/icons-material/SendRounded';
 import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useToast } from '@/contexts/ToastContext';
 import AuthModal from './authmodal';
 
 export default function ChatBox() {
   const { messages, user, connection, sendChat, login } = useMusicContext();
+  const { showToast } = useToast();
   const [input, setInput] = useState('');
-  const [error, setError] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [messages.length]);
@@ -17,8 +18,8 @@ export default function ChatBox() {
     event.preventDefault();
     const text = input.trim();
     if (!text) return;
-    try { sendChat(text); setInput(''); setError(''); }
-    catch (err) { setError((err as Error).message); }
+    try { sendChat(text); setInput(''); }
+    catch (err) { showToast((err as Error).message, { id: 'chat-send-error', tone: 'error' }); }
   };
   return (
     <div className="chat-content">
@@ -30,7 +31,6 @@ export default function ChatBox() {
         </div>)}
         <div ref={endRef} />
       </div>
-      {error && <p className="inline-error" role="status">{error}</p>}
       {user ? <form className="chat-composer" onSubmit={submit}>
         <input aria-label="聊天消息" placeholder={connection === 'connected' ? '说点什么…' : '正在重新连接…'} value={input} onChange={event => setInput(event.target.value)} maxLength={500} autoComplete="off" />
         <button className="icon-button" type="submit" title="发送消息" aria-label="发送消息" disabled={!input.trim() || connection !== 'connected'}><SendRounded /></button>

@@ -12,6 +12,7 @@ import FullscreenExitRounded from '@mui/icons-material/FullscreenExitRounded';
 import VolumeUpRounded from '@mui/icons-material/VolumeUpRounded';
 import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import SongCover from '@/components/modelItem/SongCover';
 import PlayerGlass from '@/components/playerglass';
 import { useAudioRhythm } from '@/hooks/use-audio-rhythm';
@@ -22,6 +23,7 @@ export function formatDuration(ms: number) {
 }
 
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
+  const { showToast } = useToast();
   const { audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
   const [nonCorsUrl, setNonCorsUrl] = useState<string | null>(null);
   const corsEnabled = nonCorsUrl !== audioUrl;
@@ -43,6 +45,8 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
   const lastVolume = useRef(30);
   const [showPlayPrompt, setShowPlayPrompt] = useState(false);
   const [notice, setNotice] = useState('');
+  useToastMessage(notice, { tone: 'error' });
+  useToastMessage(showPlayPrompt ? '自动播放受限，点击页面或播放按钮开始播放' : '', { tone: 'info', duration: null });
   const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const songId = currentSong?.id;
@@ -129,16 +133,10 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     document.addEventListener('fullscreenchange', onFullscreen);
     return () => document.removeEventListener('fullscreenchange', onFullscreen);
   }, []);
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(''), 4500);
-    return () => clearTimeout(timer);
-  }, [notice]);
-
   const perform = async (action: () => Promise<void>) => {
     if (busy) return;
-    setBusy(true);
-    try { await action(); } catch (error) { setNotice((error as Error).message || '操作失败，请稍后再试'); }
+    setBusy(true); setNotice('');
+    try { await action(); } catch (error) { if ((error as Error).name !== 'AbortError') setNotice((error as Error).message || '操作失败，请稍后再试'); }
     finally { setBusy(false); }
   };
   const togglePlayback = () => {
@@ -159,6 +157,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     pausedByUser.current = false;
     void tryPlay();
     await syncPlayback();
+    showToast('播放进度已同步', { tone: 'success' });
   };
   const download = async () => {
     if (!currentSong || !audioUrl) return;
@@ -168,6 +167,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     const link = document.createElement('a');
     link.href = objectUrl; link.download = currentSong.name + ' - ' + currentSong.artist + '.mp3';
     link.click();
+    showToast('歌曲下载已开始', { tone: 'success' });
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
   const toggleFullscreen = async () => {
@@ -179,8 +179,6 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
   return (
     <section className="player-dock" aria-label="音乐播放器">
       <PlayerGlass />
-      {notice && <p className="player-notice" role="status">{notice}</p>}
-      {showPlayPrompt && <button className="autoplay-prompt" data-playback-control onClick={togglePlayback}><PlayArrowRounded fontSize="small" />自动播放受限，点击页面开始播放</button>}
       <div className="player-timeline" role="progressbar" aria-label="歌曲播放进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
         <div style={{ width: progress + '%' }} />
       </div>

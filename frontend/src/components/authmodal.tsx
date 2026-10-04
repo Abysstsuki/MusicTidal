@@ -6,6 +6,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlined from '@mui/icons-material/VisibilityOffOutlined';
 import { apiRequest } from '@/lib/api';
+import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import StageDialog from './StageDialog';
 
 interface AuthModalProps {
@@ -13,6 +14,7 @@ interface AuthModalProps {
   onLoginSuccess?: (username: string, token: string) => void;
 }
 export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
+  const { showToast } = useToast();
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -20,6 +22,8 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  useToastMessage(error, { tone: 'error' });
+  useToastMessage(notice, { tone: 'success' });
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
@@ -37,6 +41,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
       if (isRegister) { setIsRegister(false); setNotice('注册成功，登录后就能和大家聊天'); setPassword(''); setShowPassword(false); }
       else {
         if (!data.token || !data.user?.username) throw new Error('登录未完成，请重试');
+        showToast('登录成功', { tone: 'success' });
         onLoginSuccess?.(data.user.username, data.token); onClose();
       }
     } catch (err) { if (!controller.signal.aborted) setError((err as Error).message); }
@@ -55,7 +60,6 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
         <input required type={showPassword ? 'text' : 'password'} minLength={6} autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" />
         <button className="icon-button password-toggle" type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onMouseDown={event => event.preventDefault()} onClick={() => setShowPassword(value => !value)}>{showPassword ? <VisibilityOffOutlined fontSize="small" /> : <VisibilityOutlined fontSize="small" />}</button>
       </span></label>
-      {error && <p className="inline-error" role="alert">{error}</p>}{notice && <p className="inline-success" role="status">{notice}</p>}
       <button className="primary-button" type="submit" disabled={busy}>{busy ? '请稍等…' : isRegister ? '注册' : '登录'}<ArrowForwardRounded fontSize="small" /></button>
       <button className="auth-switch" type="button" disabled={busy} onClick={() => { setIsRegister(value => !value); setShowPassword(false); setError(''); setNotice(''); }}>{isRegister ? '已有账户？登录' : '第一次来？创建账户'}</button>
     </form>

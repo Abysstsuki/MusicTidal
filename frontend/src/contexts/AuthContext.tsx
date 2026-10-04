@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { apiRequest, ApiError } from '@/lib/api';
+import { useToast, useToastMessage } from './ToastContext';
 
 type User = { id: number; username: string; email?: string };
 type Auth = { user: User | null; token: string; loading: boolean; error: string;
@@ -10,10 +11,12 @@ const AuthContext = createContext<Auth | null>(null);
 export function useAuth() { const auth = useContext(AuthContext); if (!auth) throw new Error('AuthProvider is required'); return auth; }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  useToastMessage(error, { id: 'auth-state-error', tone: 'error' });
   const [attempt, setAttempt] = useState(0);
   const clear = useCallback(() => {
     localStorage.removeItem('token'); localStorage.removeItem('user');
@@ -22,9 +25,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setToken(localStorage.getItem('token') || '');
     const storage = (event: StorageEvent) => { if (event.key === 'token') { setUser(null); setToken(localStorage.getItem('token') || ''); } };
-    window.addEventListener('storage', storage); window.addEventListener('auth-expired', clear);
-    return () => { window.removeEventListener('storage', storage); window.removeEventListener('auth-expired', clear); };
-  }, [clear]);
+    const expired = () => {
+      if (localStorage.getItem('token')) showToast('登录已过期，请重新登录', { id: 'auth-expired', tone: 'warning', duration: 5000 });
+      clear();
+    };
+    window.addEventListener('storage', storage); window.addEventListener('auth-expired', expired);
+    return () => { window.removeEventListener('storage', storage); window.removeEventListener('auth-expired', expired); };
+  }, [clear, showToast]);
   useEffect(() => {
     if (token === null) return;
     if (!token) { setUser(null); setLoading(false); return; }
