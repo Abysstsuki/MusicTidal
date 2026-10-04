@@ -6,18 +6,16 @@ import LockOutlined from '@mui/icons-material/LockOutlined';
 import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
-import CloseRounded from '@mui/icons-material/CloseRounded';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiRequest, ApiError } from '@/lib/api';
 import type { RoomSummary } from '@/types/room';
 import UserInfo from '@/components/userinfo';
 import AuthModal from '@/components/authmodal';
-import StageDialog from '@/components/StageDialog';
 import NeteaseBinding from '@/components/NeteaseBinding';
 import ActiveRoomChoice from '@/components/ActiveRoomChoice';
-import SongCover from '@/components/modelItem/SongCover';
+import RoomCardTrack from '@/components/RoomCardTrack';
+import RoomActionDialog, { type RoomAction } from '@/components/RoomActionDialog';
 
-type Action = { kind: 'create' } | { kind: 'join'; room: RoomSummary };
 export default function Home() {
   const auth = useAuth();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -25,7 +23,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [filter, setFilter] = useState('');
-  const [action, setAction] = useState<Action | null>(null);
+  const [action, setAction] = useState<RoomAction | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [showBinding, setShowBinding] = useState(false);
   const [active, setActive] = useState<RoomSummary | null>(null);
@@ -57,7 +55,7 @@ export default function Home() {
     apiRequest<{ room: RoomSummary | null }>('/api/user/active-room', { signal: controller.signal }).then(data => { if (!controller.signal.aborted) setActive(data.room); }).catch(() => {});
     return () => controller.abort();
   }, [auth.user]);
-  const open = (next: Action) => {
+  const open = (next: RoomAction) => {
     setAction(next); setError(''); setPassword(''); setName('');
     if (!auth.user) { authCompleted.current = false; setShowAuth(true); }
   };
@@ -100,16 +98,16 @@ export default function Home() {
       {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <article className="room-card" key={room.id}>
         <div className="room-card-heading"><span className="room-listening"><HeadphonesRounded fontSize="small" />{room.onlineCount} 人在线</span>{room.locked && <span className="room-lock"><LockOutlined fontSize="small" />密码房间</span>}</div>
         <h2>{room.name}</h2><p className="room-host">房主 · {room.host.username}</p>
-        <div className="room-card-track"><SongCover src={room.currentSong?.prcUrl} /><div><strong>{room.currentSong?.name || '等待第一首歌'}</strong><span>{room.currentSong?.artist || '入房后可以点歌'}</span></div></div>
+        <RoomCardTrack room={room} />
         {room.hostDisconnectedUntil && <p className="room-away">房主暂时离线，等待重连</p>}
         <button className="room-enter" disabled={busy || auth.loading} onClick={() => open({ kind: 'join', room })}>进入房间 <span>↗</span></button>
       </article>)}</div>}
     </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入</footer>
     {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token) => { authCompleted.current = true; auth.login(username, token); setShowAuth(false); }} />}
     {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} />}
-    {action && auth.user && !auth.loading && <StageDialog label={action.kind === 'create' ? '创建房间' : '加入房间'} onClose={() => { if (!busy) { setAction(null); setPassword(''); } }}><div className="auth-header"><h2>{action.kind === 'create' ? '创建房间' : action.room.name}</h2><button className="icon-button" disabled={busy} aria-label="关闭房间操作" onClick={() => { setAction(null); setPassword(''); }}><CloseRounded /></button></div>
-      {active && (action.kind === 'create' || active.id !== action.room.id) ? <ActiveRoomChoice room={active} onLeft={() => { setActive(null); setError(''); if (action.kind === 'join' && !action.room.locked) void enter(action.room); }} /> : action.kind === 'create' ? <form className="auth-form" onSubmit={event => void create(event)}><label>房间名称<input required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder="给房间起个名字" /></label><label>密码（可选）<input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="留空则无需密码" /></label><p className="panel-description">你将成为房主，主动离开时房间结束。网易云账号可以稍后绑定。</p><button className="primary-button" disabled={busy}>{busy ? '正在创建…' : '创建并进入'}</button></form> : action.room.locked ? <form className="auth-form" onSubmit={event => { event.preventDefault(); void enter(action.room); }}><label>房间密码<input required type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)} /></label><button className="primary-button" disabled={busy}>{busy ? '正在加入…' : '进入房间'}</button></form> : <><p role="status">{busy ? '正在加入房间…' : '准备加入房间'}</p>{!busy && <button className="primary-button" onClick={() => void enter(action.room)}>进入房间</button>}</>}
-      {error && <p className="inline-error" role="alert">{error}</p>}
-    </StageDialog>}
+    {action && auth.user && !auth.loading && <RoomActionDialog action={action} active={active} name={name} password={password} busy={busy} error={error}
+      onNameChange={setName} onPasswordChange={setPassword} onClose={() => { setAction(null); setPassword(''); }} onCreate={event => void create(event)}
+      onJoin={() => { if (action.kind === 'join') void enter(action.room); }}
+      onLeft={() => { setActive(null); setError(''); if (action.kind === 'join' && !action.room.locked) void enter(action.room); }} />}
   </main>;
 }

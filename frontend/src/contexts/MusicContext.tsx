@@ -23,6 +23,18 @@ interface MusicContextType {
 }
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 const idleRecommendations: RecommendationState = { enabled: false, loading: false, phase: null, queued: 0, error: null };
+function normalizeAudioUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // CDN audio can auto-upgrade in the player, but fetch downloads cannot.
+    if (parsed.protocol === 'http:' && (parsed.hostname === 'music.126.net' || parsed.hostname.endsWith('.music.126.net'))) {
+      parsed.protocol = 'https:';
+      return parsed.href;
+    }
+  } catch { /* Preserve relative URLs and non-CDN sources. */ }
+  return url;
+}
 export function useMusicContext() {
   const context = useContext(MusicContext);
   if (!context) throw new Error('useMusicContext must be used within a MusicProvider');
@@ -39,7 +51,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const [currentSong, setCurrentSong] = useState<Song | null>(initialState.playback.song || null);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState(initialState?.playback.url || '');
+  const [audioUrl, setAudioUrl] = useState(normalizeAudioUrl(initialState?.playback.url || ''));
   const [startTime, setStartTime] = useState(initialState?.playback.startTime || 0);
   const [playbackRevision, setPlaybackRevision] = useState(0);
   const [connection, setConnection] = useState<Connection>('connecting');
@@ -71,7 +83,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     }
   }, [roomId, exit]);
   const applyPlayback = useCallback((snapshot: PlaybackSnapshot) => {
-    setCurrentSong(snapshot.song); setAudioUrl(snapshot.url || ''); setStartTime(snapshot.startTime || 0);
+    setCurrentSong(snapshot.song); setAudioUrl(normalizeAudioUrl(snapshot.url || '')); setStartTime(snapshot.startTime || 0);
     setCurrentPosition(snapshot.song ? Math.max(0, Math.min(Date.now() - snapshot.startTime, snapshot.song.duration)) : 0);
     if (!snapshot.song) setIsPlaying(false);
     serverPlaybackRevision.current = snapshot.playbackRevision || 0;

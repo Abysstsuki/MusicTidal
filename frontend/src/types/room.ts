@@ -11,7 +11,7 @@ export interface RoomSummary {
   hostDisconnectedUntil: number | null;
   hostGracePeriodMs?: number;
 }
-export interface RoomInfo extends RoomSummary { binding: NeteaseBinding }
+export interface RoomInfo extends RoomSummary { binding: NeteaseBinding; inviteToken: string | null }
 export interface RoomState {
   room: RoomInfo; revision: number; playback: PlaybackSnapshot; queue: QueueSong[];
   recommendations: RecommendationState; members: { id: number; username: string; isHost: boolean }[]; messages: ChatMessage[];

@@ -22,8 +22,10 @@ export default function RoomPage() {
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const loginCompleted = useRef(false);
+  const invitation = useRef<string | null>(null);
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
+    invitation.current = new URLSearchParams(window.location.hash.slice(1)).get('inviteToken');
     setParams({ id: query.get('roomId') || '' });
   }, []);
   useEffect(() => {
@@ -32,15 +34,23 @@ export default function RoomPage() {
     setBusy(true); setError('');
     const enter = async () => {
       try {
-        await apiRequest('/api/rooms/' + encodeURIComponent(params.id) + '/join', { method: 'POST', body: JSON.stringify({ password }), signal: controller.signal });
+        await apiRequest('/api/rooms/' + encodeURIComponent(params.id) + '/join', { method: 'POST', body: JSON.stringify({ password, inviteToken: invitation.current || undefined }), signal: controller.signal });
         const snapshot = await apiRequest<RoomState>('/api/rooms/' + encodeURIComponent(params.id) + '/state', { signal: controller.signal });
-        if (!controller.signal.aborted) { setState(snapshot); setNeedPassword(false); setPassword(''); }
+        if (!controller.signal.aborted) {
+          invitation.current = null;
+          const fragment = new URLSearchParams(window.location.hash.slice(1));
+          fragment.delete('inviteToken');
+          const hash = fragment.toString();
+          window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (hash ? '#' + hash : ''));
+          setState(snapshot); setNeedPassword(false); setPassword('');
+        }
       } catch (problem) {
         if (controller.signal.aborted) return;
         if (problem instanceof ApiError && problem.code === 'ACTIVE_ROOM') {
           const current = await apiRequest<{ room: RoomSummary | null }>('/api/user/active-room', { signal: controller.signal });
           if (!controller.signal.aborted) setActive(current.room);
-        } else if (problem instanceof ApiError && problem.code === 'ROOM_PASSWORD') { setNeedPassword(true); if (password) setError('房间密码不正确'); }
+        } else if (problem instanceof ApiError && problem.code === 'ROOM_INVITE') { invitation.current = null; setNeedPassword(true); setError(problem.message); }
+        else if (problem instanceof ApiError && problem.code === 'ROOM_PASSWORD') { setNeedPassword(true); if (password) setError('房间密码不正确'); }
         else setError((problem as Error).message);
       } finally { if (!controller.signal.aborted) setBusy(false); }
     };

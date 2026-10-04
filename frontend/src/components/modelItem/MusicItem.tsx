@@ -35,7 +35,8 @@ export default function MusicItem({
             <img
                 src={prcUrl}
                 alt={`${name} 封面`}
-                className="w-9 h-9 object-cover flex-shrink-0"
+                draggable={false}
+                className="music-item-cover w-9 h-9 object-cover flex-shrink-0"
                 style={{ border: '1px solid var(--line)' }}
             />
 

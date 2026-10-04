@@ -5,6 +5,10 @@ import rhythmConfig from '@/lib/rhythm-config.json';
 type MotionState = { playing: boolean; rhythm: RhythmFrame };
 const PADDING = 64;
 const MAX_LYRIC_SCALE = rhythmConfig.scale;
+const MIN_RENDER_DENSITY = 2;
+const MIN_TEXTURE_DENSITY = 2.5;
+const MAX_PIXEL_DIMENSION = 4096;
+const MAX_RENDER_PIXELS = 6_000_000;
 
 // Rasterize the browser's actual text layout, preserving its font, wrapping and translation.
 function paintLyrics(copy: HTMLElement, canvas: HTMLCanvasElement, width: number, height: number, density: number, activeLayer: boolean) {
@@ -51,6 +55,9 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const gl = renderer.getContext();
+  const renderLimit = Math.min(MAX_PIXEL_DIMENSION, renderer.capabilities.maxTextureSize, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  const textureLimit = Math.min(MAX_PIXEL_DIMENSION, renderer.capabilities.maxTextureSize);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(34, 1, 1, 10000);
   const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
@@ -81,24 +88,30 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
         const textWidth = copy.clientWidth + PADDING * 2;
         const textHeight = copy.clientHeight + PADDING * 2;
         const stageBounds = host.closest('.music-stage')?.getBoundingClientRect();
-        // Leave room for the active line to grow without clipping its own canvas.
-        width = stageBounds?.width || textWidth;
-        height = stageBounds?.height || textHeight;
-        // Bound the framebuffer/texture cost on retina and wide desktop screens.
-        const density = Math.min(window.devicePixelRatio || 1, 1.75, 2048 / width, 2048 / height);
+        const stageWidth = stageBounds?.width || textWidth;
+        const stageHeight = stageBounds?.height || textHeight;
+        // Crop transparent margins while keeping room for pulse and mouse orbit.
+        width = Math.min(stageWidth, Math.ceil(textWidth * MAX_LYRIC_SCALE + PADDING * 2));
+        height = Math.min(stageHeight, Math.ceil(textHeight * MAX_LYRIC_SCALE + PADDING * 2));
+        const pixelRatio = window.devicePixelRatio || 1;
+        // Supersample even at 100% desktop scaling, within GPU and pixel budgets.
+        const density = Math.min(Math.max(pixelRatio, MIN_RENDER_DENSITY), 2.5,
+          renderLimit / width, renderLimit / height, Math.sqrt(MAX_RENDER_PIXELS / (width * height)));
         renderer.setPixelRatio(density);
         renderer.setSize(width, height, false);
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
-        camera.aspect = width / height;
-        distance = height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+        camera.aspect = stageWidth / stageHeight;
+        distance = stageHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
         const current = copy.querySelector('.lyric-current > p');
         const currentBounds = current?.getBoundingClientRect();
         anchorY = currentBounds ? copy.clientHeight / 2 - (currentBounds.top - copy.getBoundingClientRect().top + currentBounds.height / 2) : 0;
-        // Lens shift retains the DOM position while the camera orbits the active line.
-        camera.setViewOffset(width, height, 0, anchorY, width, height);
+        // Preserve the full-stage projection and lyric position inside the crop.
+        camera.setViewOffset(stageWidth, stageHeight, (stageWidth - width) / 2,
+          (stageHeight - height) / 2 + anchorY, width, height);
         camera.updateProjectionMatrix();
-        const textureDensity = Math.min(window.devicePixelRatio || 1, 2, 2048 / textWidth, 2048 / textHeight);
+        const textureDensity = Math.min(Math.max(pixelRatio, MIN_TEXTURE_DENSITY, density * MAX_LYRIC_SCALE), 3,
+          textureLimit / textWidth, textureLimit / textHeight);
         const makeTexture = (active: boolean) => {
           const textCanvas = document.createElement('canvas');
           paintLyrics(copy, textCanvas, textWidth, textHeight, textureDensity, active);
@@ -198,6 +211,13 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     delete host.dataset.webgl;
   };
   const onContextRestored = () => { contextLost = false; refresh(); start(); };
+  let pixelRatioQuery: MediaQueryList | null = null;
+  const onPixelRatioChange = () => {
+    pixelRatioQuery?.removeEventListener('change', onPixelRatioChange);
+    pixelRatioQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    pixelRatioQuery.addEventListener('change', onPixelRatioChange);
+    refresh();
+  };
   const observer = new ResizeObserver(refresh);
   observer.observe(copy);
   window.addEventListener('pointermove', onPointer, { passive: true });
@@ -209,7 +229,7 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
   canvas.addEventListener('webglcontextlost', onContextLost);
   canvas.addEventListener('webglcontextrestored', onContextRestored);
   void document.fonts.ready.then(() => { if (!disposed) refresh(); });
-  refresh();
+  onPixelRatioChange();
   return {
     refresh,
     wake: start,
@@ -223,6 +243,7 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
       window.removeEventListener('blur', resetPointer);
       document.removeEventListener('visibilitychange', onVisibility);
       document.fonts.removeEventListener('loadingdone', refresh);
+      pixelRatioQuery?.removeEventListener('change', onPixelRatioChange);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
       texture?.dispose(); adjacentTexture?.dispose(); geometry.dispose(); material.dispose(); adjacentMaterial.dispose();

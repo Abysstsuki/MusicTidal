@@ -27,7 +27,7 @@ function StageBackground({ src }: { src?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   if (!src || failed) return null;
-  return <Image className={'stage-background ' + (loaded ? 'is-loaded' : '')} src={src} alt="" aria-hidden="true" fill priority sizes="100vw" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />;
+  return <Image className={'stage-background ' + (loaded ? 'is-loaded' : '')} src={src} alt="" aria-hidden="true" draggable={false} fill priority sizes="100vw" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />;
 }
 
 export default function ListeningStage() {
@@ -43,9 +43,15 @@ export default function ListeningStage() {
   const leave = async () => { if (leaving) return; setLeaving(true); setLeaveError(''); try { await leaveRoom(); } catch (error) { setLeaveError((error as Error).message); setLeaving(false); } };
   const invite = async () => {
     if (!room) return;
+    if (room.locked && !room.inviteToken) {
+      setToast({ id: ++toastSequence.current, message: '邀请信息尚未就绪，请刷新房间后重试', error: true });
+      return;
+    }
     try {
-      const link = window.location.origin + '/room?roomId=' + encodeURIComponent(room.id);
-      await navigator.clipboard.writeText('点击加入MusicParty，' + link);
+      const link = new URL('/room', window.location.origin);
+      link.searchParams.set('roomId', room.id);
+      if (room.locked && room.inviteToken) link.hash = new URLSearchParams({ inviteToken: room.inviteToken }).toString();
+      await navigator.clipboard.writeText('点击加入MusicParty，' + link.href);
       setToast({ id: ++toastSequence.current, message: '邀请链接已复制' });
     } catch { setToast({ id: ++toastSequence.current, message: '复制失败，请手动复制地址栏中的房间链接', error: true }); }
   };

@@ -18,7 +18,7 @@ router.post('/', async (req: AuthRequest, res) => {
 router.post('/:roomId/join', async (req: AuthRequest, res) => {
   const user = await getUserById(req.user!.userId);
   if (!user) throw new HttpError(401, '请重新登录');
-  const room = await roomManager.join(String(req.params.roomId), user, req.body?.password);
+  const room = await roomManager.join(String(req.params.roomId), user, req.body?.password, req.body?.inviteToken);
   res.json({ room: room.summary() });
 });
 router.post('/:roomId/leave', (req: AuthRequest, res) => { roomManager.leave(String(req.params.roomId), req.user!.userId); res.json({ success: true }); });

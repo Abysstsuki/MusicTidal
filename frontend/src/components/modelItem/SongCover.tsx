@@ -11,5 +11,5 @@ export default function SongCover({ src, className = '' }: { src?: string; class
 function CoverImage({ src, className }: { src?: string; className: string }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <span className={'song-cover song-cover-placeholder ' + className} aria-hidden="true"><AlbumRounded /></span>;
-  return <Image className={'song-cover ' + className} src={src} alt="" width={48} height={48} onError={() => setFailed(true)} />;
+  return <Image className={'song-cover ' + className} src={src} alt="" draggable={false} width={48} height={48} onError={() => setFailed(true)} />;
 }

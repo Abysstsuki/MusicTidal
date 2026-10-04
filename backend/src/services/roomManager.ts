@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import bcrypt from 'bcrypt';
 import { createNeteaseClient, type NeteaseClient } from '../utils/neteaseHttp';
 import { HttpError } from '../utils/httpError';
@@ -17,6 +17,7 @@ type Credential = { cookie: string; encrypted: string | null; binding: BindingSt
 export class Room {
   readonly queue: SongQueueService;
   readonly host: RoomUser;
+  private readonly inviteToken: string | null;
   readonly members = new Map<number, Member>();
   readonly messages: { id: string; userId: number; username: string; text: string }[] = [];
   client: NeteaseClient = createNeteaseClient('');
@@ -27,6 +28,7 @@ export class Room {
   authorizationTask: Promise<void> | null = null;
   constructor(readonly id: string, readonly name: string, host: RoomUser, readonly passwordHash: string | null) {
     this.host = { id: host.id, username: host.username };
+    this.inviteToken = passwordHash ? randomBytes(32).toString('hex') : null;
     this.queue = new SongQueueService({
       getPlayInfo: async id => {
         await this.authorizationTask;
@@ -46,8 +48,13 @@ export class Room {
       hostGracePeriodMs: RECONNECT_GRACE_MS };
   }
   onlineMembers() { return [...this.members.values()].filter(member => member.connections.size > 0).map(member => ({ id: member.id, username: member.username, isHost: member.id === this.host.id })); }
+  info() { return { ...this.summary(), binding: this.binding, inviteToken: this.inviteToken }; }
+  acceptsInvite(token: unknown) {
+    return Boolean(this.inviteToken && typeof token === 'string' && /^[a-f0-9]{64}$/.test(token)
+      && timingSafeEqual(Buffer.from(token, 'hex'), Buffer.from(this.inviteToken, 'hex')));
+  }
   state() {
-    return { room: { ...this.summary(), binding: this.binding }, revision: this.revision,
+    return { room: this.info(), revision: this.revision,
       playback: this.queue.getPlayback(), queue: this.queue.getQueue(), recommendations: this.queue.getRecommendationState(),
       members: this.onlineMembers(), messages: [...this.messages] };
   }
@@ -58,7 +65,7 @@ export class Room {
       try { connection.send(event); } catch { /* Heartbeat owns dead-connection cleanup. */ }
     }
   }
-  changed() { this.broadcast('ROOM_UPDATED', { ...this.summary(), binding: this.binding }); this.broadcast('update', this.onlineMembers()); }
+  changed() { this.broadcast('ROOM_UPDATED', this.info()); this.broadcast('update', this.onlineMembers()); }
 }
 
 export class RoomManager {
@@ -68,7 +75,12 @@ export class RoomManager {
     private readonly invalidate: (userId: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted),
     private readonly clientFactory = createNeteaseClient) {}
 
-  list() { return [...this.rooms.values()].map(room => room.summary()); }
+  list() {
+    return [...this.rooms.values()].map(room => {
+      const summary = room.summary();
+      return { ...summary, currentSong: summary.locked ? null : summary.currentSong };
+    });
+  }
   get(id: string) {
     const room = this.rooms.get(id);
     if (!room || room.closed) throw new HttpError(404, '房间已结束或不存在', 'ROOM_CLOSED');
@@ -102,7 +114,7 @@ export class RoomManager {
     this.addMember(room, user);
     return room;
   }
-  async join(id: string, user: RoomUser, password?: unknown) {
+  async join(id: string, user: RoomUser, password?: unknown, inviteToken?: unknown) {
     let room = this.get(id);
     this.ensureAvailable(user.id, id);
     if (room.members.has(user.id)) {
@@ -110,7 +122,10 @@ export class RoomManager {
       this.activeByUser.set(user.id, id);
       return room;
     }
-    if (room.passwordHash && (typeof password !== 'string' || Buffer.byteLength(password) > 72 || !await bcrypt.compare(password, room.passwordHash))) throw new HttpError(403, '房间密码不正确', 'ROOM_PASSWORD');
+    if (room.passwordHash && !room.acceptsInvite(inviteToken)) {
+      if (inviteToken !== undefined && inviteToken !== null && inviteToken !== '') throw new HttpError(403, '邀请凭据无效，请输入房间密码', 'ROOM_INVITE');
+      if (typeof password !== 'string' || Buffer.byteLength(password) > 72 || !await bcrypt.compare(password, room.passwordHash)) throw new HttpError(403, '房间密码不正确', 'ROOM_PASSWORD');
+    }
     room = this.get(id); // The host can leave while password verification runs.
     this.ensureAvailable(user.id, id);
     if (!room.members.has(user.id)) this.addMember(room, user);

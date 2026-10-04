@@ -4,12 +4,13 @@
 
 ## 使用规则
 
-- 创建者是房主，创建时可设置密码。服务器只保存密码哈希，密码不进入邀请链接或浏览器存储。
+- 创建者是房主，创建时可设置密码。服务器只保存密码哈希；密码房间的邀请链接携带独立的入房密钥，登录后自动加入，无需再次输入密码。手动从大厅加入仍校验密码。
+- 密码房间在大厅仅显示固定高斯模糊的随机占位封面与文案，公开房间列表的 `currentSong` 为 `null`；入房后成员可查看真实歌曲详情。
 - 所有成员可以点歌、切歌、置顶、删歌和聊天。房主独占心动开关；房间使用房主个人账号的网易云授权。
 - 同一 MusicTidal 用户同时加入一个房间；同房间多标签页只计一位在线成员。退出操作会移除该用户的全部房间连接。
 - 点击「离开房间」需二次确认。房主主动离开、退出登录或最后一个连接断开后保留 180 秒，期间播放与聊天继续，房间内显示实时销毁倒计时；房主重新加入并连接成功后取消销毁。首次创建后没有建立连接也会超时清理。
 - 主动离开会立即释放当前入房身份并关闭该用户的全部连接；房主的重入预留不授予 REST 或 WebSocket 权限。重复离开不会延长倒计时，原房间销毁不会影响该用户后来加入的新房间。
-- 邀请复制内容固定为「点击加入MusicParty，<房间链接>」，复制结果以顶部居中的非阻塞提示显示。
+- 邀请复制内容固定为「点击加入MusicParty，<房间链接>」，复制结果以顶部居中的非阻塞提示显示。密码房间使用 `/room?roomId=<id>#inviteToken=<密钥>`，同一链接可供多人反复使用，校验成功不会消耗或更换密钥；只有房间销毁后失效。入房密钥只在成员快照和房间事件中返回，不出现在大厅摘要中。登录前保留邀请，入房成功后只清除当前浏览器地址栏里的密钥，不影响已分享的链接；无效邀请可改为手动输入密码。
 - 普通成员断线后保留入房资格 180 秒，期间不计在线人数；超时释放成员身份。刷新时无需再次输入密码。
 - 房间、聊天、队列和推荐均在一个后端进程内存中，重启清空；用户和网易云绑定保存在 PostgreSQL。不要运行多个后端副本。
 
@@ -44,7 +45,7 @@ node -e "const fs=require('fs'),c=require('crypto'),d=require('dotenv');const p=
 | 接口 | 行为 |
 |---|---|
 | `POST /api/rooms` | `{ name, password? }` 创建并预留房主身份 |
-| `POST /api/rooms/:roomId/join` | `{ password? }` 校验入房；已有成员可重入 |
+| `POST /api/rooms/:roomId/join` | `{ password?, inviteToken? }` 校验密码或房间专属邀请凭据；仍需登录，已有成员可重入 |
 | `POST /api/rooms/:roomId/leave` | 幂等离开；房主离开后启动 180 秒销毁倒计时 |
 | `GET /api/rooms/:roomId/state` | 成员完整快照及 `revision` |
 | `/api/rooms/:roomId/queue/*` | 原队列操作；`skipNext` 提交 `{ playbackRevision }`，并发相同版本只切一次 |
@@ -57,7 +58,7 @@ node -e "const fs=require('fs'),c=require('crypto'),d=require('dotenv');const p=
 | `DELETE /api/user/netease` | 解除个人绑定 |
 | `POST /api/user/logout` | 取消二维码并退出房间，客户端再清除本站 token |
 
-全局 `/api/queue/*` 和 `/api/netease/*` 已退役。房间接口依次校验 JWT、成员身份和操作权限。错误返回 `{ success: false, error, code? }`；`ACTIVE_ROOM` 表示先退出原房间，`ROOM_PASSWORD` 表示密码错误，`ROOM_CLOSED` 表示房间不存在，`NOT_MEMBER` 表示尚未加入。
+全局 `/api/queue/*` 和 `/api/netease/*` 已退役。房间接口依次校验 JWT、成员身份和操作权限。错误返回 `{ success: false, error, code? }`；`ACTIVE_ROOM` 表示先退出原房间，`ROOM_PASSWORD` 表示密码错误，`ROOM_INVITE` 表示邀请凭据无效，`ROOM_CLOSED` 表示房间不存在，`NOT_MEMBER` 表示尚未加入。
 
 WebSocket URL 不携带 token。建立连接后 10 秒内发送 `{ type: 'AUTH', token, roomId }`，服务器验证 JWT 和已入房资格后发送 `ROOM_SNAPSHOT`。聊天提交 `{ type: 'chat', roomId, text }`，服务器从身份记录生成用户名。未经认证的连接不会收到房间内容。
 
