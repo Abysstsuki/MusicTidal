@@ -5,10 +5,13 @@ import Image from 'next/image';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import MusicNoteRounded from '@mui/icons-material/MusicNoteRounded';
 import QrCode2Rounded from '@mui/icons-material/QrCode2Rounded';
+import LinkOffRounded from '@mui/icons-material/LinkOffRounded';
+import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import { apiRequest, ApiError } from '@/lib/api';
 import { useToastMessage } from '@/contexts/ToastContext';
 import type { NeteaseBinding as Binding } from '@/types/room';
 import StageDialog from './StageDialog';
+import playlistStyles from './playlist.module.css';
 
 type Qr = { sessionId: string; image: string; expiresAt: number };
 export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => void; onChanged?: () => Promise<void> }) {
@@ -85,6 +88,7 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
   const bindingTitle = binding?.status === 'bound' ? binding.profile?.nickname || '网易云账号' : binding?.status === 'expired' ? binding.profile?.nickname || '授权已过期' : binding ? '尚未绑定网易云账号' : '正在读取账号状态';
   const bindingDetail = binding?.status === 'bound' ? '可查看自己的歌单；担任房主时用于房间播放' : binding?.status === 'expired' ? '请重新扫码，恢复账号授权' : binding ? '可搜索公开歌单，绑定后查看个人歌单' : '请稍候';
   const bindingLabel = binding?.status === 'bound' ? '已绑定' : binding?.status === 'expired' ? '授权过期' : binding ? '游客授权' : '检查中';
+  const qrAction = busy ? '正在准备二维码…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定';
 
   return <StageDialog label="绑定网易云账号" onClose={onClose} className="netease-dialog">
     <div className="netease-dialog-header">
@@ -92,7 +96,7 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
         <span className="netease-dialog-icon"><MusicNoteRounded /></span>
         <div><span className="netease-kicker">ACCOUNT CONNECTION</span><h2>网易云音乐账号</h2></div>
       </div>
-      <button className="icon-button" aria-label="关闭绑定" onClick={onClose}><CloseRounded /></button>
+      <button className={playlistStyles.controlButton} aria-label="关闭绑定" title="关闭绑定" onClick={onClose}><CloseRounded fontSize="small" /></button>
     </div>
     <p className="netease-description">绑定后可查看自己的红心、创建和收藏歌单。作为房主时，房间使用此账号播放并提供心动推荐。</p>
 
@@ -111,9 +115,9 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
     </div>}
 
 
-    <div className="dialog-actions netease-actions">
-      <button className="primary-button" disabled={busy} onClick={() => void createQr()}><QrCode2Rounded fontSize="small" />{busy ? '正在准备二维码…' : qr ? '刷新二维码' : binding?.status === 'bound' ? '重新扫码绑定' : '扫码绑定'}</button>
-      {binding?.status !== 'unbound' && binding && <button className="pill-button" disabled={busy} onClick={() => void unbind()}>解除绑定</button>}
+    <div className={playlistStyles.accountControls} role="group" aria-label="网易云账号操作">
+      <button className={playlistStyles.controlButton} aria-label={qrAction} title={qrAction} disabled={busy} onClick={() => void createQr()}>{qr ? <RefreshRounded fontSize="small" /> : <QrCode2Rounded fontSize="small" />}</button><span>{qrAction}</span>
+      {binding?.status !== 'unbound' && binding && <button className={playlistStyles.controlButton} aria-label="解除绑定" title="解除绑定" disabled={busy} onClick={() => void unbind()}><LinkOffRounded fontSize="small" /></button>}
     </div>
   </StageDialog>;
 }

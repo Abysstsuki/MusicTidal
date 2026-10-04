@@ -126,7 +126,7 @@ export default function ListeningStage() {
             <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
               <MusicNoteRounded fontSize="small" /><span>点歌</span>
             </button>
-            <button className="pill-button request-button" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
+            <button className="pill-button request-button" aria-label="歌单" title="网易云歌单" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
             <UserInfo />
           </div>
         </header>

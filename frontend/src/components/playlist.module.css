@@ -1,8 +1,8 @@
-.browser { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.browser { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .libraryHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 12px; }
-.libraryHeading > span { min-width: 0; overflow-wrap: anywhere; }
+.libraryHeading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.tabs button { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: transparent; color: var(--text-secondary); font-size: 12px; }
+.tabs button { border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; background: transparent; color: var(--text-secondary); font-size: 11px; }
 .tabs button.selected { background: var(--accent-blue-soft); border-color: var(--accent-blue-line); color: var(--text-primary); }
 .tabs button:disabled { opacity: .45; }
 .back { display: inline-flex; align-items: center; align-self: flex-start; padding: 0; gap: 4px; border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; }
@@ -13,14 +13,22 @@
 .detailCopy span { margin-top: 4px; color: var(--text-muted); font-size: 11px; }
 .detailCopy small { margin-top: 4px; color: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .controls { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
-.controlButton { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 34px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.controlButton { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 34px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); }
 .controlButton:hover:not(:disabled) { color: var(--text-primary); background: rgba(255,255,255,.06); }
 .controlButton.controlActive { color: var(--accent); }
 .controlButton.controlActive:hover:not(:disabled) { color: var(--accent); background: var(--accent-blue-soft); }
-.playlistLink { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.playlistLink { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
 .playlistLink > svg { flex-shrink: 0; color: var(--text-muted); }
-.retry { margin-left: 8px; border: 0; background: transparent; color: var(--accent); }
-.queuePanel { display: flex; flex-direction: column; min-height: 0; padding: 16px 18px; gap: 12px; overflow-y: auto; }
+.row { padding: 8px 0; gap: 10px; }
+.browser .row > :global(.song-cover), .playlistLink > :global(.song-cover), .detailHeading > :global(.song-cover) { width: 40px; height: 40px; }
+.search { display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.04); }
+.search:focus-within { border-color: var(--accent); }
+.search input { flex: 1; min-width: 0; width: 0; padding: 6px 0; border: 0; background: transparent; color: var(--text-primary); font-size: 12px; }
+.search input:focus-visible { outline: 0; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); font-size: 11px; }
+.accountControls { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.accountControls > button:last-child:not(:first-child) { margin-left: auto; }
+.queuePanel { display: flex; flex-direction: column; min-height: 0; padding: 12px 14px; gap: 10px; overflow-y: auto; }
 .queuePanel > div[role=tabpanel] { min-height: 0; }
 .queuePanel .regular { padding: 0; }
 .modeNote { color: var(--text-muted); margin: 0; font-size: 12px; line-height: 1.6; }
