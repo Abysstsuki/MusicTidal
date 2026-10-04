@@ -20,8 +20,9 @@ import { useToast } from '@/contexts/ToastContext';
 import NeteaseBinding from './NeteaseBinding';
 import LeaveRoomDialog from './LeaveRoomDialog';
 import RoomClosureNotice from './RoomClosureNotice';
+import PlaylistBrowser from './PlaylistBrowser';
 
-type Panel = 'chat' | 'queue' | 'search' | null;
+type Panel = 'chat' | 'queue' | 'search' | 'playlist' | null;
 
 function StageBackground({ src }: { src?: string }) {
   const [loaded, setLoaded] = useState(false);
@@ -125,6 +126,7 @@ export default function ListeningStage() {
             <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
               <MusicNoteRounded fontSize="small" /><span>点歌</span>
             </button>
+            <button className="pill-button request-button" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
             <UserInfo />
           </div>
         </header>
@@ -132,7 +134,7 @@ export default function ListeningStage() {
           <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
           <span className="room-auth-state">{room?.binding.status === 'bound' ? '网易云 · ' + room.binding.profile?.nickname : room?.binding.status === 'expired' ? '网易云授权已过期' : '游客播放授权'}</span>
           <button className="pill-button" onClick={() => void invite()}>邀请</button>
-          {isHost && <button className="pill-button" onClick={() => setShowBinding(true)}>网易云账号</button>}
+          <button className="pill-button" onClick={() => setShowBinding(true)}>我的网易云</button>
           <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>
         </div>
       </div>
@@ -156,14 +158,15 @@ export default function ListeningStage() {
       </nav>
 
       {panel && (
-        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
+        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'playlist' ? '网易云歌单' : panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
           <div className="popover-heading">
-            <h2>{panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
+            <h2>{panel === 'playlist' ? <><QueueMusicRounded />网易云歌单</> : panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
             <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
           </div>
           {panel === 'chat' && <ChatBox />}
           {panel === 'queue' && <MusicQueue />}
           {panel === 'search' && <MusicReq isVisible />}
+          {panel === 'playlist' && <div className="search-content"><PlaylistBrowser /></div>}
         </aside>
       )}
 

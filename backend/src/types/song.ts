@@ -7,7 +7,8 @@ export interface Song {
 }
 export interface SongWithInstance extends Song {
   instanceId: number;
-  source?: 'manual' | 'heart';
+  source?: 'manual' | 'heart' | 'playlist';
+  playlistEntryId?: string;
 }
 
 export interface RecommendationState {
@@ -16,4 +17,5 @@ export interface RecommendationState {
   phase: 'heart' | null;
   queued: number;
   error: string | null;
+  paused?: boolean;
 }

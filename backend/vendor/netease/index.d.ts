@@ -27,3 +27,7 @@ export const user_playlist: NeteaseModule;
 export const likelist: NeteaseModule;
 export const playmode_intelligence_list: NeteaseModule;
 export const register_anonimous: NeteaseModule;
+export const enhanced_user_playlist: NeteaseModule;
+export const playlist_search: NeteaseModule;
+export const playlist_detail: NeteaseModule;
+export const song_detail: NeteaseModule;

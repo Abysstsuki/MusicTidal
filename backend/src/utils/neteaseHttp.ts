@@ -19,6 +19,10 @@ const modules: Record<string, NeteaseModule> = {
   '/user/playlist': netease.user_playlist,
   '/likelist': netease.likelist,
   '/playmode/intelligence/list': netease.playmode_intelligence_list,
+  '/playlist/user': netease.enhanced_user_playlist,
+  '/playlist/search': netease.playlist_search,
+  '/playlist/detail': netease.playlist_detail,
+  '/song/detail': netease.song_detail,
 };
 const cacheableEndpoints = new Set(['/cloudsearch', '/lyric']);
 const cacheTtl = 120_000;

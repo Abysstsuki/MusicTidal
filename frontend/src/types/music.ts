@@ -4,7 +4,8 @@ export interface Song {
   artist: string;
   prcUrl: string; // 封面图 URL
   duration: number;
-  source?: 'manual' | 'heart';
+  source?: 'manual' | 'heart' | 'playlist';
+  playlistEntryId?: string;
 }
 export interface SongSearchResponse {
   success: boolean;
@@ -24,6 +25,7 @@ export interface RecommendationState {
   phase: 'heart' | null;
   queued: number;
   error: string | null;
+  paused?: boolean;
 }
 
 export interface ChatMessage {

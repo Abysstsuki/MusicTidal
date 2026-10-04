@@ -4,11 +4,13 @@ import { authenticateToken } from '../middlewares/authMiddleware';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { neteaseBindings } from '../services/netease/binding.service';
 import { roomManager } from '../services/roomManager';
+import { userPlaylistRoutes } from './playlistRoutes';
 
 const router = express.Router();
 
 router.get('/me', authenticateToken, getUserProfile);
 router.use(authenticateToken);
+router.use('/netease/playlists', userPlaylistRoutes);
 router.get('/active-room', (req: AuthRequest, res) => { res.json({ room: roomManager.active(req.user!.userId) }); });
 router.get('/netease', async (req: AuthRequest, res) => { res.json(await neteaseBindings.status(req.user!.userId)); });
 router.post('/netease/qr', async (req: AuthRequest, res) => { res.json(await neteaseBindings.createQr(req.user!.userId)); });

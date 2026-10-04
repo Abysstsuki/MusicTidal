@@ -22,17 +22,29 @@ const prismaPath = require.resolve('../../src/utils/prisma');
 require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: { prisma: { user: repository } } };
 const { roomManager } = require('../../src/services/roomManager');
 const { neteaseBindings } = require('../../src/services/netease/binding.service');
+const { playlistCatalog } = require('../../src/services/netease/playlist.service');
 const { setupWebSocketServer } = require('../../src/services/websocketServer');
 const app = require('../../src/app').default;
 let origin = '';
 const songs = [10, 11, 12, 13, 14, 15].map(id => ({ id, name: '演示歌曲 ' + id, ar: [{ name: 'MusicTidal' }], al: { picUrl: '' }, dt: 300000 }));
+const playlist = id => ({ id, name: id === 700 ? '演示红心歌单' : '演示夜间歌单', creator: { userId: 7, nickname: '演示网易云账号' },
+  coverImgUrl: '', specialType: id === 700 ? 5 : 0, trackCount: id === 700 ? 65 : 38 });
+const playlistIds = id => Array.from({ length: id === 700 ? 65 : 38 }, (_, index) => (id === 700 ? 10 : 100) + index);
 const client = { get: async (endpoint, config) => {
+  const params = config?.params || {};
+  if (endpoint === '/login/status') return { data: { data: { code: 200, profile: { userId: 7, nickname: '演示网易云账号', avatarUrl: '' } } } };
+  if (endpoint === '/playlist/user') return { data: { code: 200, playlist: [playlist(700), playlist(701)], more: false } };
+  if (endpoint === '/playlist/search') return { data: { code: 200, result: { playlists: [playlist(700), playlist(701)].slice(Number(params.offset || 0), Number(params.offset || 0) + Number(params.limit || 30)), playlistCount: 2 } } };
+  if (endpoint === '/playlist/detail') return { data: { code: 200, playlist: { ...playlist(Number(params.id)), trackIds: playlistIds(Number(params.id)).map(id => ({ id })) } } };
+  if (endpoint === '/song/detail') return { data: { code: 200, songs: String(params.ids).split(',').map(Number).map(id => ({ id, name: '演示歌曲 ' + id, ar: [{ name: 'MusicTidal' }], al: { picUrl: '' }, dt: 300000 })) } };
   const body = endpoint === '/cloudsearch' ? { result: { songs, songCount: songs.length } } : endpoint === '/lyric' ? { lrc: { lyric: '[00:00.00]一起听见下一首歌\n[00:15.00]分享此刻的心情' } } :
     endpoint === '/user/account' ? { profile: { userId: 7, nickname: '演示网易云账号', avatarUrl: '' } } : endpoint === '/user/playlist' ? { playlist: [{ id: 700, specialType: 5, creator: { userId: 7 } }] } :
     endpoint === '/likelist' ? { ids: [10, 11] } : endpoint === '/playmode/intelligence/list' ? { data: songs.map(songInfo => ({ songInfo })) } :
     { data: [{ id: Number(config?.params?.id || 10), url: origin + '/fixture/audio', time: 300000 }] };
   return { data: { code: 200, ...body } };
 } };
+// The catalog still reads real fixture user bindings; only its cloud client is replaced.
+playlistCatalog.clientFactory = () => client;
 // Room behavior and HTTP/WS gateways are real; only external data is replaced.
 const originalCreate = roomManager.create.bind(roomManager);
 roomManager.create = async (...args) => { const room = await originalCreate(...args); room.client = client; return room; };

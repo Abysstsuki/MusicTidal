@@ -1,0 +1,26 @@
+.browser { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.libraryHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 12px; }
+.libraryHeading > span { min-width: 0; overflow-wrap: anywhere; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: transparent; color: var(--text-secondary); font-size: 12px; }
+.tabs button.selected { background: var(--accent-blue-soft); border-color: var(--accent-blue-line); color: var(--text-primary); }
+.tabs button:disabled { opacity: .45; }
+.back { display: inline-flex; align-items: center; align-self: flex-start; padding: 0; gap: 4px; border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; }
+.detailHeading { display: flex; align-items: center; gap: 10px; }
+.detailCopy { flex: 1; min-width: 0; }
+.detailCopy strong, .detailCopy span, .detailCopy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detailCopy strong { font-size: 13px; font-weight: 500; }
+.detailCopy span { margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.detailCopy small { margin-top: 4px; color: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.controls { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
+.controlButton { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 34px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.controlButton:hover:not(:disabled) { color: var(--text-primary); background: rgba(255,255,255,.06); }
+.controlButton.controlActive { color: var(--accent); }
+.controlButton.controlActive:hover:not(:disabled) { color: var(--accent); background: var(--accent-blue-soft); }
+.playlistLink { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.playlistLink > svg { flex-shrink: 0; color: var(--text-muted); }
+.retry { margin-left: 8px; border: 0; background: transparent; color: var(--accent); }
+.queuePanel { display: flex; flex-direction: column; min-height: 0; padding: 16px 18px; gap: 12px; overflow-y: auto; }
+.queuePanel > div[role=tabpanel] { min-height: 0; }
+.queuePanel .regular { padding: 0; }
+.modeNote { color: var(--text-muted); margin: 0; font-size: 12px; line-height: 1.6; }

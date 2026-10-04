@@ -7,6 +7,7 @@ import type { RoomInfo, RoomState } from '@/types/room';
 import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
 import { useAuth } from './AuthContext';
 import { useToast, useToastMessage } from './ToastContext';
+import { emptyPlaylists, type PlaylistState, type PlaybackMode } from '@/types/playlist';
 
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 interface MusicContextType {
@@ -15,6 +16,9 @@ interface MusicContextType {
   playbackRevision: number; connection: Connection; queue: QueueSong[]; recommendations: RecommendationState;
   messages: ChatMessage[]; onlineUsers: string[]; user: { id?: number; username: string } | null;
   room: RoomInfo | null; isHost: boolean;
+  playlists: PlaylistState;
+  setPlaybackMode: (mode: PlaybackMode) => Promise<void>;
+  playlistAction: (path: string, body?: object, method?: string) => Promise<void>;
   setCurrentSong: (song: Song | null) => void; setCurrentPosition: (position: number) => void; setIsPlaying: (playing: boolean) => void;
   syncPlayback: () => Promise<void>; skipNext: () => Promise<void>; enqueue: (song: Song) => Promise<void>;
   moveToTop: (instanceId: number) => Promise<void>; removeFromQueue: (instanceId: number) => Promise<void>;
@@ -58,6 +62,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const [playbackRevision, setPlaybackRevision] = useState(0);
   const [connection, setConnection] = useState<Connection>('connecting');
   const [queue, setQueue] = useState<QueueSong[]>(initialState.queue || []);
+  const [playlists, setPlaylists] = useState<PlaylistState>(initialState.playlists || emptyPlaylists);
   const [recommendations, setRecommendations] = useState<RecommendationState>(initialState?.recommendations || idleRecommendations);
   const [messages, setMessages] = useState<ChatMessage[]>(initialState.messages || []);
   const [onlineUsers, setOnlineUsers] = useState<string[]>(initialState.members.map(member => member.username) || []);
@@ -87,7 +92,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     const signal = options?.signal ? AbortSignal.any([lifetime.current.signal, options.signal]) : lifetime.current.signal;
     try { return await apiRequest<T>('/api/rooms/' + encodeURIComponent(roomId) + path, { ...options, signal }); }
     catch (error) {
-      if (error instanceof ApiError && (error.status === 404 || error.code === 'NOT_MEMBER')) exit(error.message);
+      if (error instanceof ApiError && (error.code === 'ROOM_CLOSED' || error.code === 'NOT_MEMBER')) exit(error.message);
       throw error;
     }
   }, [roomId, exit]);
@@ -102,6 +107,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     if (closed.current || lifetime.current.signal.aborted || state.room.id !== roomId || state.revision < revision.current) return;
     revision.current = state.revision;
     setRoom(state.room); applyPlayback(state.playback); setQueue(state.queue); setRecommendations(state.recommendations);
+    setPlaylists(state.playlists || emptyPlaylists);
     setMessages(state.messages); setOnlineUsers(state.members.map(member => member.username));
   }, [roomId, applyPlayback]);
   const syncPlayback = useCallback(async () => {
@@ -144,6 +150,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
           if (data.type === 'PLAY_SONG') applyPlayback(data.payload);
           else if (data.type === 'QUEUE_UPDATED') setQueue(data.payload);
           else if (data.type === 'RECOMMENDATIONS_UPDATED') setRecommendations(data.payload);
+          else if (data.type === 'PLAYLIST_STATE_UPDATED') setPlaylists(data.payload);
           else if (data.type === 'ROOM_UPDATED') setRoom(data.payload);
           else if (data.type === 'update') setOnlineUsers(data.payload.map((member: { username: string }) => member.username));
           else if (data.type === 'chat') setMessages(items => [...items, data.payload].slice(-25));
@@ -166,6 +173,10 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const enqueue = async (song: Song) => {
     await mutateQueue('add', { song });
   };
+  const playlistAction = async (path: string, body: object = {}, method = 'POST') => {
+    await requestRoom('/playlists' + path, { method, body: method === 'DELETE' ? undefined : JSON.stringify(body) });
+    await syncPlayback();
+  };
   const moveToTop = async (instanceId: number) => {
     await mutateQueue('moveTop', { instanceId });
   };
@@ -187,7 +198,8 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     await requestRoom('/leave', { method: 'POST' }); exit('已离开房间');
   };
   return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision,
-    connection, queue, recommendations, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id,
+    connection, queue, recommendations, playlists, messages, onlineUsers, user, room, isHost: room?.host.id === auth.user?.id,
+    playlistAction, setPlaybackMode: mode => mutateQueue('mode', { mode }),
     setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, moveToTop, removeFromQueue,
     startRecommendations: () => setRecommendationMode(true), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
 }

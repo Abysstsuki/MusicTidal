@@ -1,4 +1,5 @@
 import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState } from './music';
+import type { PlaylistState } from './playlist';
 
 export interface NeteaseBinding {
   status: 'unbound' | 'bound' | 'expired';
@@ -15,4 +16,5 @@ export interface RoomInfo extends RoomSummary { binding: NeteaseBinding; inviteT
 export interface RoomState {
   room: RoomInfo; revision: number; playback: PlaybackSnapshot; queue: QueueSong[];
   recommendations: RecommendationState; members: { id: number; username: string; isHost: boolean }[]; messages: ChatMessage[];
+  playlists?: PlaylistState;
 }

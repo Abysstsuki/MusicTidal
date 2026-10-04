@@ -43,7 +43,7 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
         if (stopped) return;
         setError('');
         if (result.status === 'authorized' && result.binding) {
-          setBinding(result.binding); setQr(null); session.current = null; setStatus('绑定成功，可以在房间开启心动模式');
+          setBinding(result.binding); setQr(null); session.current = null; setStatus('绑定成功，可以查看自己的网易云歌单');
           await onChanged?.(); return;
         }
         if (result.status === 'expired' || Date.now() >= qr.expiresAt) { setQr(null); session.current = null; setStatus('二维码已过期，请重新生成'); return; }
@@ -83,7 +83,7 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
   };
   const bindingState = binding?.status || 'loading';
   const bindingTitle = binding?.status === 'bound' ? binding.profile?.nickname || '网易云账号' : binding?.status === 'expired' ? binding.profile?.nickname || '授权已过期' : binding ? '尚未绑定网易云账号' : '正在读取账号状态';
-  const bindingDetail = binding?.status === 'bound' ? '房间将使用此账号播放，可开启心动模式' : binding?.status === 'expired' ? '请重新扫码，恢复账号授权' : binding ? '当前房间使用游客播放授权' : '请稍候';
+  const bindingDetail = binding?.status === 'bound' ? '可查看自己的歌单；担任房主时用于房间播放' : binding?.status === 'expired' ? '请重新扫码，恢复账号授权' : binding ? '可搜索公开歌单，绑定后查看个人歌单' : '请稍候';
   const bindingLabel = binding?.status === 'bound' ? '已绑定' : binding?.status === 'expired' ? '授权过期' : binding ? '游客授权' : '检查中';
 
   return <StageDialog label="绑定网易云账号" onClose={onClose} className="netease-dialog">
@@ -94,7 +94,7 @@ export default function NeteaseBinding({ onClose, onChanged }: { onClose: () => 
       </div>
       <button className="icon-button" aria-label="关闭绑定" onClick={onClose}><CloseRounded /></button>
     </div>
-    <p className="netease-description">绑定后，房间将使用此账号播放，并可开启心动模式。</p>
+    <p className="netease-description">绑定后可查看自己的红心、创建和收藏歌单。作为房主时，房间使用此账号播放并提供心动推荐。</p>
 
     <div className={'netease-binding-card netease-status-' + bindingState}>
       <span className="netease-binding-indicator" aria-hidden="true" />

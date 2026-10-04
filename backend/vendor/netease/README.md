@@ -1,5 +1,18 @@
 # Embedded Netease API subset
 
+## Playlist additions
+
+`enhanced/` vendors user_playlist, cloudsearch, playlist_detail and song_detail from
+NeteaseCloudMusicApiEnhanced/api-enhanced commit
+`2aab9957dfd5231e5b192aecdb177f93ace4c92e` (MIT; `enhanced/LICENSE`).
+These additions are isolated from the legacy search/heart/QR modules.
+`enhanced/index.js` adapts the upstream URI/data/options signature to the existing
+EAPI/WEAPI transport, requests plain responses, and explicitly forwards timeout
+and guest authorization. `util/option.js` removes the global personal Cookie
+fallback. `playlist_detail.js` requests n=1: a lightweight complete ID index and
+at most one track detail. The project pages song_detail in batches of at most
+100; it never obtains an entire playlist's playback URLs up front.
+
 Source: the project's `NeteaseCloudMusicApi-master`, version 4.11.1, by Binaryify (MIT; see `LICENSE`). No dependency on that sibling directory remains at runtime.
 
 This subset includes `cloudsearch`, `song_url_v1`, `lyric`, `user_account`, `recommend_songs`, `personal_fm`, `user_playlist`, `likelist`, and `playmode_intelligence_list`. The last three modules support the room's heart mode, using the account's liked playlist and liked song IDs. They are copied unchanged from the same 4.11.1 source. `register_anonimous` is included only to acquire an in-memory guest token when no credentials are configured. Modules are statically imported by `index.js`; the original HTTP server and dynamic directory loading are omitted.

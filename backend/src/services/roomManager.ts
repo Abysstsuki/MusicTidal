@@ -6,6 +6,7 @@ import { neteaseBindings, type BindingStatus } from './netease/binding.service';
 import { getSongPlayInfo } from './netease/song.service';
 import { HeartModeSession } from './netease/recommendation.service';
 import { SongQueueService } from './songQueueService';
+import { playlistCatalog } from './netease/playlist.service';
 
 export const RECONNECT_GRACE_MS = 180_000;
 export type RoomUser = { id: number; username: string };
@@ -36,6 +37,10 @@ export class Room {
         return getSongPlayInfo(id, this.client);
       },
       createHeartSession: initial => new HeartModeSession(initial, this.client),
+      getPlaylistSong: async candidate => {
+        await playlistCatalog.index(candidate.userId, candidate.playlistId);
+        return (await playlistCatalog.songs(candidate.userId, [candidate.songId]))[0];
+      },
       emit: event => this.broadcast(event.type, event.payload),
     });
   }
@@ -56,6 +61,7 @@ export class Room {
   state() {
     return { room: this.info(), revision: this.revision,
       playback: this.queue.getPlayback(), queue: this.queue.getQueue(), recommendations: this.queue.getRecommendationState(),
+      playlists: this.queue.getPlaylistState(),
       members: this.onlineMembers(), messages: [...this.messages] };
   }
   broadcast(type: string, payload: unknown) {
@@ -211,6 +217,7 @@ export class RoomManager {
     room.changed();
   }
   async refreshAuthorization(userId: number) {
+    for (const room of this.rooms.values()) room.queue.invalidatePlaylistSource(userId);
     // A host may bind again after leaving; retained rooms must also revoke old credentials.
     await Promise.all([...this.rooms.values()].filter(room => room.host.id === userId)
       .map(room => this.refreshRoomAuthorization(room, userId)));

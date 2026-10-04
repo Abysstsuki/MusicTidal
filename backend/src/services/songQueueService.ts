@@ -1,10 +1,14 @@
 import { RecommendationState, Song, SongWithInstance } from '../types/song';
 import { HeartModeError, HeartModeSession } from './netease/recommendation.service';
+import { PlaylistQueue, type PlaylistCandidate } from './playlistQueue';
+import type { PlaybackMode, PlaylistIndex, PlaylistOrder, PlaylistState } from '../types/playlist';
+import { HttpError } from '../utils/httpError';
 
 export interface QueueDependencies {
   getPlayInfo: (id: string) => Promise<{ url: string; time: number }>;
   createHeartSession: (initialSongId?: number) => Pick<HeartModeSession, 'nextSongs'>;
   emit: (event: { type: string; payload: unknown }) => void;
+  getPlaylistSong?: (candidate: PlaylistCandidate) => Promise<Song | undefined>;
 }
 
 export class SongQueueService {
@@ -18,6 +22,8 @@ export class SongQueueService {
   private loading = false;
   private loadingSong: SongWithInstance | null = null;
   private generation = 0;
+  private mode: PlaybackMode = 'regular';
+  readonly playlists = new PlaylistQueue();
   private recommendedQueue: SongWithInstance[] = [];
   private recommendationsEnabled = false;
   private recommendationPhase: 'heart' | null = null;
@@ -35,8 +41,61 @@ export class SongQueueService {
   getQueue() { return [...this.queue, ...this.recommendedQueue]; }
   peek() { return this.queue[0] || this.recommendedQueue[0]; }
   getRecommendationState(): RecommendationState {
-    return { enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, queued: this.recommendedQueue.length, error: this.recommendationError };
+    return { enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, queued: this.recommendedQueue.length, error: this.recommendationError, paused: this.mode === 'playlist' };
   }
+  getPlaylistState(): PlaylistState {
+    return { mode: this.mode, activeEntryId: this.playlists.activeEntryId, entries: this.playlists.snapshots(), loading: this.mode === 'playlist' && this.loading };
+  }
+  addPlaylist(index: PlaylistIndex, addedBy: { id: number; username: string }) {
+    this.assertAlive(); const entryId = this.playlists.add(index, addedBy); this.broadcastPlaylists(); return entryId;
+  }
+  activatePlaylist(entryId: string) {
+    this.assertAlive(); this.playlists.activate(entryId); this.changeMode('playlist');
+  }
+  setMode(mode: PlaybackMode) {
+    this.assertAlive();
+    if (mode === 'playlist' && !this.playlists.activeEntryId) throw new HttpError(409, '请先选择一张歌单', 'PLAYLIST_NOT_ACTIVE');
+    if (mode === this.mode) return;
+    this.changeMode(mode);
+  }
+  setPlaylistSettings(entryId: string, order: PlaylistOrder | undefined, repeat: boolean | undefined) {
+    this.assertAlive(); this.playlists.settings(entryId, order, repeat);
+    if (this.mode === 'playlist' && entryId === this.playlists.activeEntryId) this.cancelPendingSelection();
+    this.broadcastPlaylists(); void this.startNextSongIfIdle();
+  }
+  nominatePlaylistSong(entryId: string, songId: number) {
+    this.assertAlive(); this.playlists.nominate(entryId, songId);
+    if (this.mode === 'playlist') this.cancelPendingSelection();
+    this.broadcastPlaylists(); void this.startNextSongIfIdle();
+  }
+  removePlaylist(entryId: string) {
+    this.assertAlive();
+    if (entryId === this.playlists.activeEntryId && this.mode === 'playlist') this.cancelPendingSelection();
+    this.playlists.remove(entryId); this.broadcastPlaylists();
+  }
+  invalidatePlaylistSource(userId: number) {
+    if (this.disposed) return;
+    if (this.playlists.invalidateSource(userId) && this.mode === 'playlist') this.cancelPendingSelection();
+    this.broadcastPlaylists();
+  }
+  private assertAlive() { if (this.disposed) throw new HttpError(404, '房间已结束', 'ROOM_CLOSED'); }
+  private changeMode(mode: PlaybackMode) {
+    this.cancelPendingSelection(); this.mode = mode;
+    if (mode === 'playlist') {
+      ++this.recommendationGeneration; this.refillTask = null; this.recommendationLoading = false;
+      if (this.refillRetryTimer) clearTimeout(this.refillRetryTimer);
+      this.refillRetryTimer = null;
+    }
+    this.broadcastQueue(); this.broadcastPlaylists(); void this.startNextSongIfIdle();
+    if (mode === 'regular') void this.refillRecommendations();
+  }
+  private cancelPendingSelection() {
+    ++this.generation;
+    if (this.loadingSong?.source === 'manual') this.queue.unshift(this.loadingSong);
+    else if (this.loadingSong?.source === 'heart' && this.recommendationsEnabled) this.recommendedQueue.unshift(this.loadingSong);
+    this.loadingSong = null; this.loading = false;
+  }
+  private broadcastPlaylists() { this.emit({ type: 'PLAYLIST_STATE_UPDATED', payload: this.getPlaylistState() }); }
 
   enqueue(song: Song) {
     if (this.disposed) throw new Error('房间已结束');
@@ -134,7 +193,7 @@ export class SongQueueService {
 
   private refillRecommendations(): Promise<void> {
     const session = this.heartModeSession;
-    if (!this.recommendationsEnabled || !session || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
+    if (this.mode !== 'regular' || !this.recommendationsEnabled || !session || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
     if (this.refillTask) return this.refillTask;
     const generation = this.recommendationGeneration;
     this.recommendationLoading = true;
@@ -207,18 +266,28 @@ export class SongQueueService {
 
   async startNextSongIfIdle() {
     if (this.disposed || this.currentSong || this.loading) return;
-    if (!this.peek()) { void this.refillRecommendations(); return; }
+    const playlistCandidate = this.mode === 'playlist' ? this.playlists.peek() : null;
+    if (this.mode === 'playlist' ? !playlistCandidate : !this.peek()) { this.broadcastPlaylists(); if (this.mode === 'regular') void this.refillRecommendations(); return; }
     this.loading = true;
     const generation = this.generation;
     const recommendationGeneration = this.recommendationGeneration;
-    const nextSong = this.dequeue()!;
+    let nextSong = this.mode === 'regular' ? this.dequeue()! : null;
     this.loadingSong = nextSong;
     this.broadcastQueue();
+    this.broadcastPlaylists();
     void this.refillRecommendations();
     try {
+      if (playlistCandidate) {
+        const details = await this.dependencies.getPlaylistSong?.(playlistCandidate);
+        if (generation !== this.generation) return;
+        if (!details) throw new Error('No playlist song details');
+        nextSong = { ...details, instanceId: ++this.currentInstanceId, source: 'playlist', playlistEntryId: playlistCandidate.entryId };
+        this.loadingSong = nextSong;
+      }
+      if (!nextSong) throw new Error('No next song');
       const playInfo = await this.dependencies.getPlayInfo(String(nextSong.id));
       if (generation !== this.generation) return;
-      if (nextSong.source !== 'manual' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.length)) {
+      if (nextSong.source === 'heart' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.length)) {
         if (this.recommendationsEnabled && recommendationGeneration === this.recommendationGeneration) this.recommendedQueue.unshift(nextSong);
         this.broadcastQueue();
         return;
@@ -229,26 +298,36 @@ export class SongQueueService {
       const song = { ...nextSong, duration };
       const startTime = Date.now();
       this.currentSong = { song, url: playInfo.url, startTime };
+      if (playlistCandidate) this.playlists.consume(playlistCandidate, true);
       ++this.playbackRevision;
       this.rememberSong(song.id);
       this.emit({ type: 'PLAY_SONG', payload: this.getPlayback() });
+      this.broadcastPlaylists();
       // Song duration is milliseconds. Only the server advances shared playback.
       this.timer = setTimeout(() => {
-        if (generation !== this.generation) return;
+        if (this.disposed || this.currentSong?.song.instanceId !== song.instanceId) return;
         this.timer = null;
         this.finishCurrentSong();
         void this.startNextSongIfIdle();
       }, duration);
-    } catch {
+    } catch (error) {
       if (generation === this.generation) {
-        this.rememberSong(nextSong.id);
-        if (nextSong.source === 'heart') this.excludeRecommendation(nextSong.id);
-        console.warn('Skipping unavailable track:', nextSong.id);
+        if (playlistCandidate) {
+          if (error instanceof HttpError) this.playlists.block(playlistCandidate.entryId, error.message);
+          else this.playlists.consume(playlistCandidate, false);
+          this.broadcastPlaylists();
+        }
+        if (nextSong) {
+          this.rememberSong(nextSong.id);
+          if (nextSong.source === 'heart') this.excludeRecommendation(nextSong.id);
+          console.warn('Skipping unavailable track:', nextSong.id);
+        }
       }
     } finally {
       if (generation === this.generation) {
         this.loading = false;
         this.loadingSong = null;
+        this.broadcastPlaylists();
         if (!this.currentSong) void this.startNextSongIfIdle();
       }
     }
@@ -281,9 +360,7 @@ export class SongQueueService {
   resetAuthorization() {
     if (this.disposed) return;
     if (!this.currentSong) {
-      ++this.generation;
-      if (this.loadingSong?.source === 'manual') this.queue.unshift(this.loadingSong);
-      this.loadingSong = null; this.loading = false;
+      this.cancelPendingSelection();
     }
     this.excludedRecommendationIds = [];
     this.stopRecommendations();
@@ -296,6 +373,7 @@ export class SongQueueService {
     if (this.refillRetryTimer) clearTimeout(this.refillRetryTimer);
     this.timer = null; this.refillRetryTimer = null;
     this.queue = []; this.recommendedQueue = []; this.currentSong = null;
+    this.playlists.clear();
     this.heartModeSession = null; this.refillTask = null; this.loadingSong = null;
     this.loading = false; this.recommendationsEnabled = false; this.recommendationLoading = false;
   }

@@ -44,4 +44,5 @@ for (const [name, module] of Object.entries(modules)) {
     }),
   )
 }
+Object.assign(api, require('./enhanced')(cookieToJson))
 module.exports = api
