@@ -232,22 +232,25 @@ button svg { flex-shrink: 0; }
   border: 1px solid transparent;
   border-radius: 56px;
 }
-/* The library renders only the material; the playback controls sit above it. */
+/* RGB refraction affects only the backdrop; controls remain sharp above it. */
 .player-glass {
   position: absolute;
   z-index: 0;
   inset: -1px;
   pointer-events: none;
   border-radius: inherit;
+  background: rgba(0,0,0,.10);
+  border: 1px solid rgba(255,255,255,.24);
+  backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+  -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+  box-shadow: inset 0 0 2px 1px rgba(255,255,255,.32), inset 0 0 10px 4px rgba(255,255,255,.12), inset 0 -8px 24px rgba(0,0,0,.08), 0 8px 28px rgba(0,0,0,.14);
 }
-.player-glass-lens > .glass,
-.player-glass-lens > .glass > div,
-.player-glass-spacer,
-.player-glass-loading {
-  width: 100%;
-  height: 100%;
+.player-glass.is-refracting {
+  backdrop-filter: var(--player-glass-filter) saturate(1);
+  -webkit-backdrop-filter: var(--player-glass-filter) saturate(1);
 }
-.player-glass-loading { border-radius: inherit; background: rgba(27,26,30,.92); }
+.player-glass.is-solid { background: rgba(27,26,30,.96); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.player-glass-filter { position: absolute; pointer-events: none; }
 .player-timeline { position: absolute; z-index: 1; top: 16px; left: 40px; right: 155px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.21); box-shadow: inset 0 1px 2px rgba(0,0,0,.15); overflow: visible; }
 .player-timeline > div { position: relative; height: 100%; background: linear-gradient(90deg, #fa4354, #ffc2c9); box-shadow: 0 0 9px rgba(250,67,84,.16); border-radius: inherit; transition: width .3s linear; }
 .player-timeline > div::after { content: ""; position: absolute; right: -4px; top: -2px; width: 7px; height: 7px; background: #fff2f4; box-shadow: 0 1px 4px rgba(0,0,0,.2); border-radius: 50%; }
@@ -481,10 +484,10 @@ button svg { flex-shrink: 0; }
   .panel-description { margin-bottom: 8px; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .player-glass { background: rgba(27,26,30,.96) !important; opacity: 1 !important; }
+  .player-glass { background: rgba(27,26,30,.96) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
 @media (forced-colors: active) {
-  .player-glass { background: Canvas !important; border: 1px solid CanvasText; opacity: 1 !important; }
+  .player-glass { background: Canvas !important; border: 1px solid CanvasText; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none; }
   .play-button, .sync-button { background: ButtonFace; color: ButtonText; border-color: ButtonText; box-shadow: none; }
   .player-track strong, .player-track span, .player-time, .player-dock .icon-button { color: CanvasText; }
   .volume-control input { appearance: auto; background: transparent; }
