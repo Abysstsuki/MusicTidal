@@ -22,9 +22,49 @@ export function formatDuration(ms: number) {
   return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 }
 
+type VolumePreference = { volume: number; lastVolume: number };
+const volumeStorageKey = (userId: number) => 'musictidal:player-volume:' + userId;
+const validVolume = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+
+function readVolumePreference(userId?: number): VolumePreference {
+  const fallback = { volume: 30, lastVolume: 30 };
+  if (userId === undefined || typeof window === 'undefined') return fallback;
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(volumeStorageKey(userId)) || 'null');
+    if (!saved || typeof saved !== 'object' || !('volume' in saved) || !validVolume(saved.volume)) return fallback;
+    const lastVolume = 'lastVolume' in saved && validVolume(saved.lastVolume) && saved.lastVolume > 0 ? saved.lastVolume : 30;
+    return { volume: saved.volume, lastVolume: saved.volume > 0 ? saved.volume : lastVolume };
+  } catch { return fallback; }
+}
+
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
   const { showToast } = useToast();
-  const { audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const { user, audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const userId = user?.id;
+  const [volumePreference, setVolumePreference] = useState(() => readVolumePreference(userId));
+  const volume = volumePreference.volume;
+  const volumePreferenceRef = useRef(volumePreference);
+  const volumeUserId = useRef(userId);
+  useEffect(() => {
+    if (volumeUserId.current === userId) return;
+    volumeUserId.current = userId;
+    const restored = readVolumePreference(userId);
+    volumePreferenceRef.current = restored;
+    setVolumePreference(restored);
+    if (audioRef.current) audioRef.current.volume = restored.volume / 100;
+  }, [userId, audioRef]);
+  const setVolume = (next: number) => {
+    if (!validVolume(next)) return;
+    const previous = volumeUserId.current === userId ? volumePreferenceRef.current : readVolumePreference(userId);
+    const preference = { volume: next, lastVolume: next > 0 ? next : previous.lastVolume };
+    volumeUserId.current = userId;
+    volumePreferenceRef.current = preference;
+    setVolumePreference(preference);
+    if (userId !== undefined) {
+      try { localStorage.setItem(volumeStorageKey(userId), JSON.stringify(preference)); }
+      catch { /* Playback remains usable when browser storage is unavailable. */ }
+    }
+  };
   const [nonCorsUrl, setNonCorsUrl] = useState<string | null>(null);
   const corsEnabled = nonCorsUrl !== audioUrl;
   useAudioRhythm(audioRef, rhythmReader);
@@ -36,13 +76,13 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
       if (node) { previous.removeAttribute('src'); previous.load(); }
     }
     audioRef.current = node;
+    // Restore before the first play, including replacement audio elements after a CORS fallback.
+    if (node) node.volume = volumePreferenceRef.current.volume / 100;
   }, [audioRef]);
   const loadedPlayback = useRef<{ songId: number; url: string; startTime: number; cors: boolean } | null>(null);
   const playRequest = useRef(0);
   const pausedByUser = useRef(false);
   const autoplayBlocked = useRef(false);
-  const [volume, setVolume] = useState(30);
-  const lastVolume = useRef(30);
   const [showPlayPrompt, setShowPlayPrompt] = useState(false);
   const [notice, setNotice] = useState('');
   useToastMessage(notice, { tone: 'error' });
@@ -127,7 +167,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
     return () => { if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); } };
   }, [audioRef, corsEnabled]);
 
-  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100; }, [audioRef, volume, corsEnabled]);
+  useEffect(() => { if (audioRef.current) audioRef.current.volume = volumePreferenceRef.current.volume / 100; }, [audioRef, volume, corsEnabled]);
   useEffect(() => {
     const onFullscreen = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFullscreen);
@@ -198,7 +238,7 @@ export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics
         </div>
         <button className={'icon-button lyrics-toggle ' + (showLyrics ? 'is-active' : '')} onClick={onToggleLyrics} aria-label={showLyrics ? '隐藏歌词' : '显示歌词'} aria-pressed={showLyrics} title="切换歌词"><LyricsOutlined /></button>
         <div className="volume-control">
-          <button className="icon-button" onClick={() => { if (volume) { lastVolume.current = volume; setVolume(0); } else setVolume(lastVolume.current); }} aria-label={volume ? '静音' : '取消静音'} title={volume ? '静音' : '取消静音'}>{volume ? <VolumeUpRounded /> : <VolumeOffRounded />}</button>
+          <button className="icon-button" onClick={() => setVolume(volume ? 0 : volumePreferenceRef.current.lastVolume)} aria-label={volume ? '静音' : '取消静音'} title={volume ? '静音' : '取消静音'}>{volume ? <VolumeUpRounded /> : <VolumeOffRounded />}</button>
           <input aria-label="音量" type="range" min="0" max="100" value={volume} style={{ '--volume-percent': volume + '%' } as CSSProperties} onChange={event => setVolume(Number(event.target.value))} />
         </div>
         <button className="icon-button fullscreen-button" onClick={() => void perform(toggleFullscreen)} aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'}>{fullscreen ? <FullscreenExitRounded /> : <FullscreenRounded />}</button>
