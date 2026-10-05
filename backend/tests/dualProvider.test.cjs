@@ -10,6 +10,24 @@ const qqApi = require('../vendor/qqmusic');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const song = (id, provider = 'netease') => ({ id, provider, name: 'Track ' + id, artist: 'Fixture', prcUrl: '', duration: 180000 });
 
+test('an in-flight QQ request retries with a renewed Cookie without expiring the new authorization',async t=>{
+  let rejectOld;const calls=[];t.mock.method(qqApi,'details',async(cookie)=>{
+    calls.push(cookie);if(cookie==='old')return new Promise((_resolve,reject)=>{rejectOld=reject;});return{tracks:[{id:1,mid:'official',interval:180}]};
+  });
+  let expired=0;const client=new QqMusicClient('old',()=>++expired);t.after(()=>client.dispose());
+  const pending=client.details([1]);client.updateCredential('renewed',()=>++expired);
+  rejectOld(Object.assign(new Error('expired old key'),{code:1000}));
+  assert.equal((await pending)[0].id,1);assert.deepEqual(calls,['old','renewed']);assert.equal(expired,0);
+});
+test('QQ requests wait for a pending refresh before deciding whether the old Key is expired',async t=>{
+  let release,expired=0;const renewing=new Promise(resolve=>{release=resolve;}),calls=[];
+  t.mock.method(qqApi,'details',async(cookie)=>{calls.push(cookie);if(cookie==='old')throw Object.assign(new Error('expired'),{code:1000});return{tracks:[{id:1,mid:'official'}]};});
+  const client=new QqMusicClient('old',async()=>{await renewing;++expired;});t.after(()=>client.dispose());
+  const pending=client.details([1]);await settle();assert.deepEqual(calls,['old']);
+  client.updateCredential('renewed',()=>{throw new Error('new credential must not expire');});release();
+  assert.equal((await pending)[0].id,1);assert.deepEqual(calls,['old','renewed']);assert.equal(expired,1);
+});
+
 test('VIP labels distinguish playback fees, purchases, quality-only membership and download fees', () => {
   assert.equal(neteaseSong({ id: 1, fee: 8 }).access, 'quality');
   assert.equal(neteaseSong({ id: 1 }, { fee: 1 }).access, 'vip');

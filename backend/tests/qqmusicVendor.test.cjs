@@ -2,6 +2,26 @@ const { test }=require('node:test');const assert=require('node:assert/strict');
 const axiosPath=require.resolve('axios');require('axios');
 let handler;require.cache[axiosPath].exports=async config=>handler(config);
 const api=require('../vendor/qqmusic');const {rpc,request}=require('../vendor/qqmusic/request');
+test('QQ web refresh uses tickets from an existing Cookie and retains provider expiry and rotated tickets',async()=>{
+  const cookie='uin=7; qqmusic_key=old; tmeLoginType=2; psrf_qqrefresh_token=fixture-refresh; psrf_qqaccess_token=fixture-access; psrf_qqopenid=fixture-openid; psrf_access_token_expiresAt=1900000000';
+  handler=async config=>{
+    const body=JSON.parse(config.data);assert.equal(config.headers.Cookie,cookie);assert.equal(body.req.module,'QQConnectLogin.LoginServer');
+    assert.equal(body.req.method,'QQLogin');assert.equal(body.req.param.musicid,7);assert.equal(body.req.param.refresh_token,'fixture-refresh');
+    assert.equal(config.headers['Content-Type'],'application/x-www-form-urlencoded');
+    return{status:200,data:JSON.stringify({code:0,req:{code:0,data:{musicid:7,musickey:'new',refresh_token:'rotated',access_token:'new-access',openid:'fixture-openid',loginType:2,musickeyCreateTime:1800000000,keyExpiresIn:7200}}}),headers:{'set-cookie':['psrf_qqrefresh_token=rotated; Path=/']}};
+  };
+  const result=await api.refreshCredential(cookie);assert.equal(result.expiresAt,1800007200000);
+  assert.equal(api.cookies(result.cookie).psrf_qqrefresh_token,'rotated');assert.equal(api.cookies(result.cookie).qqmusic_key,'new');
+  assert.equal(api.credentialInfo(result.cookie).canRefresh,true);
+  await assert.rejects(api.refreshCredential(cookie+'; tmeLoginType=1'),error=>error.reason==='MISSING_REFRESH_TICKETS');
+});
+test('refresh rejection and unexpected accounts never expose or save upstream credentials',async()=>{
+  const cookie='uin=7; qqmusic_key=old; psrf_qqrefresh_token=fixture-refresh; psrf_qqaccess_token=fixture-access; psrf_qqopenid=fixture-openid';
+  handler=async()=>({status:200,data:'{"code":0,"req":{"code":1000,"data":{"musickey":"private"}}}',headers:{}});
+  await assert.rejects(api.refreshCredential(cookie),error=>error.upstreamCode===1000&&!JSON.stringify(error).includes('private'));
+  handler=async()=>({status:200,data:'{"code":0,"req":{"code":0,"data":{"musicid":8,"musickey":"private"}}}',headers:{}});
+  await assert.rejects(api.refreshCredential(cookie),error=>error.reason==='ACCOUNT_CHANGED');
+});
 test('native QQ QR exchange retains server-only cookies and supports graph check_sig host',async()=>{
   const calls=[];handler=async config=>{calls.push(config);const url=new URL(config.url);
     if(url.pathname==='/ptqrshow')return{data:Buffer.from('png'),headers:{'set-cookie':['qrsig=fixture; Path=/']}};

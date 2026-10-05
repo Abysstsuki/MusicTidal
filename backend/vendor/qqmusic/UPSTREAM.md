@@ -43,3 +43,13 @@ Search rejection handling (2026-10-05): check inner search codes and negative
 `meta.is_filter` statuses even when the RPC reports code zero. Rejected searches
 raise a search failure instead of being cached as successful empty results;
 they do not invalidate an otherwise valid music binding.
+
+QQ web credential renewal (2026-10-05): independent request implementation of
+`QQConnectLogin.LoginServer/QQLogin`, using musicid/musickey and the QQ OpenID,
+access token, refresh token and token expiry retained in music-domain Cookies.
+Preserve rotated tickets and the actual musickeyCreateTime/keyExpiresIn returned
+by the provider. Existing Cookie-only credentials use psrf_musickey_createtime
+and the observed 259200-second lifetime until a refresh obtains explicit expiry.
+QQ refresh was verified twice with a real account and subsequent profile reads.
+WeChat refresh is deliberately not enabled; its QR binding remains supported.
+Protocol reference: https://github.com/jsososo/QQMusicApi/blob/master/routes/user.js

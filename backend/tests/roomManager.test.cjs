@@ -9,6 +9,54 @@ const song = id => ({ id, name: 'Song ' + id, artist: 'Artist', duration: 900000
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function manager(t) { const value = new RoomManager(async () => guest); t.after(() => value.dispose()); return value; }
 
+test('QQ credential renewal preserves the client, active roaming and playback and ignores old expiry callbacks',async t=>{
+  let credential={cookie:'old',encrypted:'old-envelope',binding:{status:'bound',profile:{uid:'7',nickname:'Fixture',avatarUrl:''},boundAt:null}};
+  const clients=[],invalidations=[];
+  const factory=(cookie,onExpired)=>{
+    const client={cookie,onExpired,dispose(){this.disposed=true;},updateCredential(next,callback){this.cookie=next;this.onExpired=callback;},
+      play:async()=>({url:'https://fixture.invalid/audio',time:900000}),roam:async()=>[1,2].map(id=>({...song(id),provider:'qqmusic'}))};
+    clients.push(client);return client;
+  };
+  const m=new RoomManager(async()=>guest,async()=>{},undefined,{credentials:async()=>credential,invalidate:async(_id,encrypted)=>invalidations.push(encrypted),clientFactory:factory});
+  t.after(()=>m.dispose());const room=await m.create(user(1),'Renewal');
+  room.queue.enqueue({...song(10),provider:'qqmusic'});await settle();await room.queue.startHeartMode('qqmusic');await settle();
+  room.queue.enqueue({...song(11),provider:'qqmusic'});
+  const client=room.qqmusicClient,expireOld=client.onExpired,playback=room.queue.getPlayback(),queue=room.queue.getQueue(),recommendations=room.queue.getRecommendationState(),version=room.qqmusicVersion;
+  credential={...credential,cookie:'renewed',encrypted:'new-envelope'};
+  await m.renewQqAuthorization(1,'old-envelope',credential);
+  assert.equal(room.qqmusicClient,client);assert.equal(client.cookie,'renewed');assert.equal(client.disposed,undefined);
+  assert.deepEqual(room.queue.getPlayback(),playback);assert.deepEqual(room.queue.getQueue(),queue);assert.deepEqual(room.queue.getRecommendationState(),recommendations);
+  assert.equal(room.qqmusicVersion,version);expireOld();assert.equal(room.qqmusicBinding.status,'bound');assert.deepEqual(invalidations,[]);
+  await m.renewQqAuthorization(1,'old-envelope',{cookie:'stale',encrypted:'stale-envelope'});assert.equal(client.cookie,'renewed');
+  client.onExpired();await settle();assert.deepEqual(invalidations,['new-envelope']);
+});
+
+test('QQ renewal leaves an active playlist playing at the same progress',async t=>{
+  const {qqmusicPlaylistCatalog}=require('../src/services/qqmusic/playlist.service');
+  const index={playlist:{id:7,provider:'qqmusic',name:'Fixture',coverUrl:'',creator:'Fixture',trackCount:3,isLiked:false},trackIds:[1,2,3]};
+  t.mock.method(qqmusicPlaylistCatalog,'index',async()=>index);
+  t.mock.method(qqmusicPlaylistCatalog,'songs',async(_id,ids)=>ids.map(id=>({...song(id),provider:'qqmusic'})));
+  const credential={cookie:'old',encrypted:'old-envelope',binding:{status:'bound',profile:{uid:'7',nickname:'Fixture',avatarUrl:''},boundAt:null}};
+  const factory=()=>({dispose(){},updateCredential(){},play:async()=>({url:'https://fixture.invalid/audio',time:900000})});
+  const m=new RoomManager(async()=>guest,async()=>{},undefined,{credentials:async()=>credential,invalidate:async()=>{},clientFactory:factory});
+  t.after(()=>m.dispose());const room=await m.create(user(1),'Playlist renewal');
+  const entry=room.queue.addPlaylist(index,user(1));room.queue.activatePlaylist(entry);await settle();await settle();
+  const playback=room.queue.getPlayback(),playlists=room.queue.getPlaylistState();assert.equal(playback.song.id,1);
+  await m.renewQqAuthorization(1,'old-envelope',{cookie:'renewed',encrypted:'new-envelope'});
+  assert.deepEqual(room.queue.getPlayback(),playback);assert.deepEqual(room.queue.getPlaylistState(),playlists);
+});
+test('room expiry is deferred until a pending QQ renewal has updated the live client',async t=>{
+  let release;const renewing=new Promise(resolve=>{release=resolve;}),invalidations=[];
+  const credential={cookie:'old',encrypted:'old-envelope',binding:{status:'bound',profile:{uid:'7',nickname:'Fixture',avatarUrl:''},boundAt:null}};
+  const factory=(cookie,onExpired)=>({cookie,onExpired,dispose(){},updateCredential(next,callback){this.cookie=next;this.onExpired=callback;},play:async()=>({url:'https://fixture.invalid/audio',time:900000})});
+  const m=new RoomManager(async()=>guest,async()=>{},undefined,{credentials:async()=>credential,invalidate:async()=>invalidations.push('expired'),clientFactory:factory,waitForRenewal:()=>renewing});
+  t.after(()=>m.dispose());const room=await m.create(user(1),'Pending renewal');
+  room.queue.enqueue({...song(1),provider:'qqmusic'});await settle();const playback=room.queue.getPlayback();
+  const expiry=room.qqmusicClient.onExpired();assert.equal(room.qqmusicBinding.status,'bound');
+  await m.renewQqAuthorization(1,'old-envelope',{cookie:'renewed',encrypted:'new-envelope'});release();await expiry;
+  assert.equal(room.qqmusicBinding.status,'bound');assert.deepEqual(room.queue.getPlayback(),playback);assert.deepEqual(invalidations,[]);
+});
+
 test('rooms isolate queue, playback, messages and broadcast recipients', async t => {
   const m = manager(t); const a = await m.create({ ...user(1), email: 'private', password: 'sensitive', neteaseCookieEncrypted: 'secret' }, 'Room A'); const b = await m.create(user(2), 'Room B');
   const sa = socket(), sb = socket(); m.connect(a.id, 1, sa); m.connect(b.id, 2, sb);

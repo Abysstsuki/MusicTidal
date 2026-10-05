@@ -6,6 +6,7 @@ import path from 'path';
 import http from 'http';
 import { setupWebSocketServer } from './services/websocketServer';
 import { roomManager } from './services/roomManager';
+import { qqmusicBindings } from './services/qqmusic/binding.service';
 
 // 加载 .env（默认配置）
 dotenv.config();
@@ -21,6 +22,7 @@ if (fs.existsSync(envOverridePath)) {
 const PORT = process.env.PORT || 3001;
 
 async function startServer() {
+  await qqmusicBindings.startAutoRenewal();
   await roomManager.initializeSuperRoom();
   const server = http.createServer(app); // 使用 http server 包装 express
 
@@ -30,7 +32,7 @@ async function startServer() {
   server.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
   });
-  const shutdown = () => { roomManager.dispose(); server.close(); };
+  const shutdown = () => { qqmusicBindings.dispose(); roomManager.dispose(); server.close(); };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 }

@@ -43,6 +43,38 @@ docker compose --env-file .env.docker ps
 
 无登录公开请求已取得 QQ 歌曲元数据及平台试听 URL；这不能替代账号验收。当前网络下公开搜索返回空结果，必须在实际部署网络与已绑定账号下检查搜索。微信区真实扫码、个人/收藏歌单、漫游、VIP 完整播放及非会员试听仍待真实账号验收。当前本机无 Docker，容器构建、Compose 状态及反向代理 HTTPS/WSS 仍需在现有服务器完成；本地 HTTP/WS 检查不等同于 Compose 验收。
 
+## QQ 授权自动续期
+
+QQ 登录凭据到期前 **30 分钟**由后端自动续期，使用已实测成功的
+`QQConnectLogin.LoginServer / QQLogin` 网页协议。按平台返回的
+`musickeyCreateTime + keyExpiresIn` 保存到期时间；2026-10-05 的真实 QQ
+验证连续两次刷新取得新音乐 Key，账号读取成功，返回的音乐 Key 寿命为 72 小时。
+该寿命不等于刷新票据永远有效。微信续期未启用，QQ／微信扫码绑定入口不变。
+
+无需新增数据库字段、SQL 迁移或密钥。仍使用 `qqmusicCookieEncrypted` 和 v1
+AES-256-GCM 加密；新加密载荷包含完整 Cookie 及到期时间，读取时兼容旧的纯 Cookie。
+历史 Cookie 中的 `psrf_qqrefresh_token`、`psrf_qqaccess_token`、`psrf_qqopenid`
+可直接用于续期，无需统一重新扫码。旧 Cookie 的到期时间按
+`psrf_musickey_createtime` 加已实测的 72 小时推算，成功续期后改用实际响应时间；
+票据齐全但没有时间戳时会立即续期以取得到期时间。缺失票据的绑定继续沿用已有
+Cookie，授权失效后需要重新扫码。
+
+启动时分页恢复所有有效绑定的定时器，用户离线也会续期；已进入续期窗口的绑定
+立即补刷。新绑定注册新定时器，解绑、账号替换、授权失效及停服会取消对应任务。
+网络、账号查询或数据库写入失败按 1／2／4／5 分钟退避重试；数据库写入失败时
+暂存已取得的新凭据，避免再次消费旧票据。确认票据被拒绝时，保留当前 Key 到期前
+的授权，到期后标记失效。日志只包含允许的原因和数字错误码，不含票据或响应。
+
+续期写入按用户串行并校验旧密文，迟到的响应不会覆盖新绑定或恢复已解绑账号。
+成功续期直接更新房间使用的 QQ 客户端；当前音频、手动队列、歌单进度和 QQ 漫游
+保持运行。正在请求的旧 Key 若返回失效，会用新 Cookie 重试一次。个人歌单的新
+请求读取最新凭据，绑定时间与公开账号资料不变。
+旧 Key 的失效处理会等待正在进行的续期及保存，避免把刚刷新成功的绑定误判为过期。
+
+更新后只需重建后端，无需发布前端：在服务器 `backend` 目录执行
+`docker compose --env-file .env.docker up -d --build`。容器重启仍会结束现有房间；
+账户及已加密保存的绑定保留。
+
 ## QQ 扫码失败排查
 
 `QQMUSIC_QR_POLL_FAILED` 表示扫码状态、登录票据确认、OAuth 跳转或音乐凭据交换中的任一步骤失败，不表示数据库迁移失败。扫码确认后的请求保持[上游实现](https://github.com/sansenjian/qq-music-api/blob/main/src/services/apis/user/checkQQLoginQr.ts)的编码：OAuth 使用 multipart FormData，音乐登录发送 JSON 文本且 Content-Type 为 `application/x-www-form-urlencoded`。QQ 的凭据可由 Set-Cookie 返回，不要求 `req.data` 存在。

@@ -2,6 +2,7 @@
 const { randomUUID } = require('crypto');
 const { CookieJar } = require('tough-cookie');
 const { request, cookies, merge, hash, MUSICU } = require('./request');
+const { loginCredential } = require('./refresh');
 const WX_APPID = 'wx48db31d50e334801';
 const QQ_LOGIN_REFERER = 'https://xui.ptlogin2.qq.com/';
 const QQ_OAUTH_RETURN = 'https://graph.qq.com/oauth2.0/login_jump';
@@ -154,12 +155,14 @@ async function exchange(state) {
     if (state.channel === 'qq') delete state.code;
     throw failure('MISSING_MUSIC_CREDENTIALS', { httpStatus: response.status });
   }
-  state.authorizedCookie = cookie;
-  return { status: 'authorized', cookie };
+  const credential = state.channel === 'qq' ? loginCredential(cookie, data) : { cookie, expiresAt: null };
+  state.authorizedCookie = credential.cookie;
+  state.keyExpiresAt = credential.expiresAt;
+  return { status: 'authorized', cookie: credential.cookie, expiresAt: credential.expiresAt };
   });
 }
 async function pollQr(state) {
-  if (state.authorizedCookie) return { status: 'authorized', cookie: state.authorizedCookie };
+  if (state.authorizedCookie) return { status: 'authorized', cookie: state.authorizedCookie, expiresAt: state.keyExpiresAt ?? null };
   if (state.code) return exchange(state);
   if (state.channel === 'wechat') {
     let response;

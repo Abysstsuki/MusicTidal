@@ -24,7 +24,8 @@ export type RoomEvent = { type: string; roomId: string; revision: number; payloa
 export interface RoomConnection { send(event: RoomEvent): void; close(): void }
 type Member = RoomUser & { connections: Set<RoomConnection>; expiresAt: number | null; timer: ReturnType<typeof setTimeout> | null };
 type Credential = { cookie: string; encrypted: string | null; binding: BindingStatus };
-type QqDependencies = { credentials: (id: number) => Promise<Credential>; invalidate: (id: number, encrypted: string) => Promise<void>; clientFactory: typeof createQqMusicClient };
+type QqDependencies = { credentials: (id: number) => Promise<Credential>; invalidate: (id: number, encrypted: string) => Promise<void>;
+  clientFactory: typeof createQqMusicClient; waitForRenewal?: (id: number, encrypted: string) => Promise<void> | null };
 
 export class Room {
   readonly queue: SongQueueService;
@@ -40,6 +41,7 @@ export class Room {
   anonymousClient: NeteaseClient = createNeteaseClient('');
   anonymousQqmusicClient: QqMusicClient = createQqMusicClient('');
   qqmusicVersion = 0;
+  qqmusicEncrypted: string | null = null;
   qqmusicAuthorizationTask: Promise<void> | null = null;
   revision = 0;
   closed = false;
@@ -347,21 +349,44 @@ export class RoomManager {
     await task;
   }
   private applyQqCredential(room: Room, credential: Credential) {
-    const userId = room.authorizationUserId;
     const version = ++room.qqmusicVersion;
     room.qqmusicClient.dispose(); room.qqmusicBinding = credential.binding;
-    room.qqmusicClient = (this.qq?.clientFactory || createQqMusicClient)(credential.cookie, () => {
-      if (room.closed || version !== room.qqmusicVersion || !credential.encrypted) return;
+    room.qqmusicEncrypted = credential.encrypted;
+    room.qqmusicClient = (this.qq?.clientFactory || createQqMusicClient)(credential.cookie, this.qqExpiryHandler(room, credential.encrypted, version));
+    room.queue.resetAuthorization('qqmusic'); room.changed();
+  }
+  private qqExpiryHandler(room: Room, encrypted: string | null, version: number) {
+    const userId = room.authorizationUserId;
+    const expire = () => {
+      if (room.closed || version !== room.qqmusicVersion || !encrypted || encrypted !== room.qqmusicEncrypted) return;
       ++room.qqmusicVersion; room.qqmusicBinding = { ...room.qqmusicBinding, status: 'expired' };
       room.qqmusicClient.dispose(); room.queue.resetAuthorization('qqmusic'); room.changed();
-      if (userId !== null) void this.qq?.invalidate(userId, credential.encrypted).catch(() => console.warn('Unable to persist QQ binding expiry.'));
-    });
-    room.queue.resetAuthorization('qqmusic'); room.changed();
+      if (userId !== null) void this.qq?.invalidate(userId, encrypted).catch(() => console.warn('Unable to persist QQ binding expiry.'));
+    };
+    return () => {
+      if (room.closed || version !== room.qqmusicVersion || !encrypted || encrypted !== room.qqmusicEncrypted) return;
+      const pending = userId !== null ? this.qq?.waitForRenewal?.(userId, encrypted) : null;
+      if (pending) return pending.then(expire, expire);
+      expire();
+    };
+  }
+  async renewQqAuthorization(userId: number, previousEncrypted: string, credential: { cookie: string; encrypted: string }) {
+    if (this.disposed) return;
+    await Promise.all([...this.rooms.values()].filter(room => room.authorizationUserId === userId).map(async room => {
+      await room.qqmusicAuthorizationTask;
+      if (room.closed || room.authorizationUserId !== userId || room.qqmusicEncrypted !== previousEncrypted) return;
+      if (room.qqmusicBinding.status !== 'bound') { await this.refreshQqAuthorization(room, userId); return; }
+      // Keep the client used by an active QQ roaming session and in-flight playback.
+      // The account, authorization version and playlist/recommendation queues are unchanged.
+      room.qqmusicEncrypted = credential.encrypted;
+      room.qqmusicClient.updateCredential(credential.cookie, this.qqExpiryHandler(room, credential.encrypted, room.qqmusicVersion));
+    }));
   }
   private async refreshQqAuthorization(room: Room, userId: number) {
     if (!this.qq) return;
     const version = ++room.qqmusicVersion;
     room.qqmusicClient.dispose(); room.qqmusicBinding = { status: 'unbound', profile: null, boundAt: null };
+    room.qqmusicEncrypted = null;
     const task = this.qq.credentials(userId).then(credential => {
       if (!room.closed && version === room.qqmusicVersion) this.applyQqCredential(room, credential);
     }).finally(() => { if (room.qqmusicAuthorizationTask === task) room.qqmusicAuthorizationTask = null; });
@@ -377,10 +402,14 @@ export class RoomManager {
 }
 
 export const roomManager = new RoomManager(undefined, undefined, undefined, { credentials: id => qqmusicBindings.credential(id),
-  invalidate: (id, encrypted) => qqmusicBindings.markInvalid(id, encrypted), clientFactory: createQqMusicClient });
+  invalidate: (id, encrypted) => qqmusicBindings.markInvalid(id, encrypted), clientFactory: createQqMusicClient,
+  waitForRenewal: (id, encrypted) => qqmusicBindings.waitForRenewal(id, encrypted) });
 neteaseBindings.on('changed', (userId: number) => {
   void roomManager.refreshAuthorization(userId).catch(() => console.warn('Unable to refresh room authorization.'));
 });
 qqmusicBindings.on('changed', (userId: number) => {
   void roomManager.refreshAuthorization(userId, 'qqmusic').catch(() => console.warn('Unable to refresh QQ room authorization.'));
+});
+qqmusicBindings.on('renewed', (userId: number, previousEncrypted: string, credential: { cookie: string; encrypted: string }) => {
+  void roomManager.renewQqAuthorization(userId, previousEncrypted, credential).catch(() => console.warn('Unable to apply renewed QQ room authorization.'));
 });

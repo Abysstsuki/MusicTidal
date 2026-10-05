@@ -8,20 +8,33 @@ export class QqMusicClient implements NeteaseClient {
   private controller = new AbortController();
   private cache = new Map<number, any>();
   private searches = new Map<string, { expires: number; value: any }>();
-  constructor(private readonly cookie: string, private readonly onExpired?: () => void) {}
+  private credentialVersion = 0;
+  constructor(private cookie: string, private onExpired?: () => void | Promise<void>) {}
+  updateCredential(cookie: string, onExpired?: () => void | Promise<void>) {
+    if (this.disposed) return;
+    this.cookie = cookie; this.onExpired = onExpired; ++this.credentialVersion;
+  }
   dispose() { this.disposed = true; this.controller.abort(); this.cache.clear(); this.searches.clear(); }
-  private async call<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private async call<T>(work: (signal: AbortSignal) => Promise<T>, retried = false): Promise<T> {
     if (this.disposed) throw new HttpError(409, 'QQ 音乐绑定已变化', 'QQMUSIC_BINDING_CHANGED');
+    const version = this.credentialVersion;
     try {
       const value = await work(this.controller.signal);
       if (this.disposed) throw new HttpError(409, 'QQ 音乐绑定已变化', 'QQMUSIC_BINDING_CHANGED');
       return value;
     } catch (error) {
+      if (this.disposed) throw new HttpError(409, 'QQ 音乐绑定已变化', 'QQMUSIC_BINDING_CHANGED');
       if ((error as any).code === 'SEARCH_REJECTED') {
         throw new HttpError(502, this.cookie ? 'QQ 音乐搜索暂不可用，请稍后重试' : 'QQ 音乐匿名搜索暂不可用', 'QQMUSIC_SEARCH_UNAVAILABLE');
       }
       if ([1000, 104400, 104401].includes(Number((error as any).code))) {
-        this.onExpired?.(); throw new HttpError(409, 'QQ 音乐授权已过期，请重新绑定', 'QQMUSIC_BINDING_EXPIRED');
+        if (version !== this.credentialVersion) {
+          if (!retried) return this.call(work, true);
+          throw new HttpError(409, 'QQ 音乐授权已更新，请重试', 'QQMUSIC_BINDING_CHANGED');
+        }
+        await this.onExpired?.();
+        if (!this.disposed && version !== this.credentialVersion && !retried) return this.call(work, true);
+        throw new HttpError(409, 'QQ 音乐授权已过期，请重新绑定', 'QQMUSIC_BINDING_EXPIRED');
       }
       if (error instanceof HttpError) throw error;
       throw new HttpError(502, 'QQ 音乐接口暂不可用，请稍后重试', 'QQMUSIC_UNAVAILABLE');
@@ -125,4 +138,4 @@ export class QqMusicClient implements NeteaseClient {
     throw new HttpError(404, 'QQ 音乐接口不存在');
   }
 }
-export const createQqMusicClient = (cookie: string, onExpired?: () => void) => new QqMusicClient(cookie, onExpired);
+export const createQqMusicClient = (cookie: string, onExpired?: () => void | Promise<void>) => new QqMusicClient(cookie, onExpired);
