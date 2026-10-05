@@ -72,15 +72,30 @@ async function requestHeartModeData(client: NeteaseClient, endpoint: string, par
 
 type HeartModeSource = { playlistId: number; seedIds: number[] };
 
+function shuffleSeedIds(seedIds: number[], lastSeedId?: number): number[] {
+  const shuffled = [...seedIds];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  if (shuffled.length > 1 && shuffled[0] === lastSeedId) {
+    const j = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+    [shuffled[0], shuffled[j]] = [shuffled[j], shuffled[0]];
+  }
+  return shuffled;
+}
+
 // A session belongs to one room activation. Stopped requests cannot change a new session's cursor.
 export class HeartModeSession {
   private source: HeartModeSource | null = null;
   private sourceExpiresAt = 0;
   private seedIndex = 0;
+  private lastSeedId?: number;
   private requestCount = 0;
   private pendingSongs: Song[] = [];
 
-  constructor(private readonly initialSongId?: number, private readonly client: NeteaseClient = neteaseHttp) {}
+  // Keep the existing factory signature; the first seed now comes from the shuffled list.
+  constructor(_initialSongId?: number, private readonly client: NeteaseClient = neteaseHttp) {}
 
   private async loadSource(): Promise<HeartModeSource> {
     if (this.source && this.sourceExpiresAt > Date.now()) return this.source;
@@ -109,13 +124,25 @@ export class HeartModeSession {
     if (!Array.isArray(liked.ids)) throw new HeartModeError('红心歌曲暂时无法读取', true);
     const seedIds = [...new Set<number>(liked.ids.filter((id: unknown): id is number => Number.isSafeInteger(id) && Number(id) > 0))];
     if (!seedIds.length) throw new HeartModeError('红心歌单为空，请先在网易云收藏歌曲', false);
-    const preferredSeed = this.source
-      ? this.source.seedIds[this.seedIndex % this.source.seedIds.length]
-      : this.initialSongId;
-    const preferredIndex = preferredSeed === undefined ? -1 : seedIds.indexOf(preferredSeed);
-    this.seedIndex = preferredIndex >= 0 ? preferredIndex : Math.floor(Math.random() * seedIds.length);
-    if (this.source && this.source.playlistId !== playlistId) this.requestCount = 0;
-    this.source = { playlistId, seedIds };
+    let orderedSeedIds: number[];
+    if (this.source?.playlistId === playlistId) {
+      // Refresh membership without replaying used seeds or reordering the remaining ones.
+      const likedIds = new Set(seedIds);
+      const knownIds = new Set(this.source.seedIds);
+      const consumed = this.source.seedIds.slice(0, this.seedIndex).filter(id => likedIds.has(id));
+      const remaining = this.source.seedIds.slice(this.seedIndex).filter(id => likedIds.has(id));
+      for (const id of seedIds.filter(id => !knownIds.has(id))) {
+        const index = Math.floor(Math.random() * (remaining.length + 1));
+        remaining.splice(index, 0, id);
+      }
+      orderedSeedIds = [...consumed, ...remaining];
+      this.seedIndex = consumed.length;
+    } else {
+      orderedSeedIds = shuffleSeedIds(seedIds, this.lastSeedId);
+      this.seedIndex = 0;
+      this.requestCount = 0;
+    }
+    this.source = { playlistId, seedIds: orderedSeedIds };
     this.sourceExpiresAt = Date.now() + 5 * 60_000;
     return this.source;
   }
@@ -123,12 +150,17 @@ export class HeartModeSession {
   async nextSongs(): Promise<Song[]> {
     if (this.pendingSongs.length) return this.pendingSongs.splice(0, 3);
     const source = await this.loadSource();
-    const seedId = source.seedIds[this.seedIndex % source.seedIds.length];
+    if (this.seedIndex >= source.seedIds.length) {
+      source.seedIds = shuffleSeedIds(source.seedIds, this.lastSeedId);
+      this.seedIndex = 0;
+    }
+    const seedId = source.seedIds[this.seedIndex];
     const result = await requestHeartModeData(this.client, '/playmode/intelligence/list', {
       id: seedId, pid: source.playlistId, sid: seedId, count: this.requestCount + 1,
     });
     if (!Array.isArray(result.data)) throw new HeartModeError('心动推荐列表暂时无法读取', true);
-    this.seedIndex = (this.seedIndex + 1) % source.seedIds.length;
+    this.seedIndex += 1;
+    this.lastSeedId = seedId;
     this.requestCount += 1;
     this.pendingSongs = normalizeHeartModeSongs(result.data);
     return this.pendingSongs.splice(0, 3);

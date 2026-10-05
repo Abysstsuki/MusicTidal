@@ -28,7 +28,7 @@ test('heart sessions choose the owner liked playlist and preserve unconsumed bat
   assert.deepEqual((await session.nextSongs()).map(song => song.id), [10, 11, 12]);
   assert.deepEqual((await session.nextSongs()).map(song => song.id), [13]);
   const call = a.calls.find(item => item.endpoint === '/playmode/intelligence/list');
-  assert.equal(call.options.params.pid, 700); assert.equal(call.options.params.id, 10);
+  assert.equal(call.options.params.pid, 700); assert.ok([10, 11].includes(call.options.params.id));
   assert.equal(a.calls.filter(item => item.endpoint === '/playmode/intelligence/list').length, 1);
 });
 test('two account sessions use their own clients and playlist sources', async () => {
