@@ -177,7 +177,7 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     strength += ((motion.playing ? 1 : 0) - strength) * blend;
     const beat = rhythm.pulse * strength;
     // Gentle sway and onset scaling remain independent of the mouse orbit.
-    const sway = (0.0015 + rhythm.energy * 0.004) * strength;
+    const sway = (0.00165 + rhythm.energy * 0.0044) * strength;
     const desiredRotation = Math.sin(t * 1.35) * sway;
     rotation += (desiredRotation - rotation) * blend;
     const desiredScale = 1 + Math.max(0, Math.min(1, beat)) * (MAX_LYRIC_SCALE - 1);
@@ -185,8 +185,8 @@ export function createLyricScene(host: HTMLElement, copy: HTMLElement, canvas: H
     cameraX += (targetX - cameraX) * blend;
     cameraY += (targetY - cameraY) * blend;
     // Fixed-radius orbit: mouse perspective cannot zoom out and cancel the pulse.
-    const yaw = cameraX * 0.29;
-    const pitch = -cameraY * 0.19;
+    const yaw = cameraX * 0.319;
+    const pitch = -cameraY * 0.209;
     camera.position.set(distance * Math.sin(yaw) * Math.cos(pitch), anchorY + distance * Math.sin(pitch), distance * Math.cos(yaw) * Math.cos(pitch));
     camera.lookAt(0, anchorY, 0);
     anchor.rotation.z = rotation;
