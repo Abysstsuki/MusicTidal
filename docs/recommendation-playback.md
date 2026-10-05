@@ -16,6 +16,10 @@
 
 ## 接口与消息
 
+以上续播规则适用于普通房间。常驻 `super-room` 永久禁用网易云心动与 QQ 漫游/猜你喜欢，只推进成员点歌或选定歌单。推荐区域显示「超级房间仅支持点歌与歌单播放，所有自动推荐续播均已禁用。」开关和来源控件不可操作，服务端也不会创建推荐会话、补歌任务或重试定时器。成员调用开启接口返回 `403 / RECOMMENDATIONS_DISABLED`；停止接口幂等返回禁用状态。
+
+`RecommendationState` 新增 `available` 和 `disabledReason`。普通房间返回 `true / null`；超级房间返回 `false / 禁用原因`，且 `enabled`、`loading` 始终为 `false`，`provider`、`phase` 为 `null`，`queued` 为 `0`。REST 快照与现有 WebSocket 事件均携带这些字段。
+
 | 接口 | 用途 |
 |---|---|
 | `POST /api/rooms/:roomId/queue/recommendations/start` | 房主开启心动模式；重复开启共用同一会话和补歌任务 |

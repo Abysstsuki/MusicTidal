@@ -1,31 +1,29 @@
 .searchHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .scope { flex: 1; min-width: 0; margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
 .searchHint { margin: -3px 0 10px; color: var(--text-muted); font-size: 10px; line-height: 1.6; }
-.entry { display: flex; justify-content: flex-end; flex-shrink: 0; margin-bottom: 10px; }
-.searchHeading .entry { margin-bottom: 0; }
-.entry button, .header button, .actions button, .problems button { min-height: 30px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+.entry { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 8px; }
+.entry.withLeading { width: 100%; justify-content: space-between; }
+.entry > button, .header > button, .actions > button, .problems button { min-height: 30px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
 .entry button, .primary { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
-.entry button svg, .primary svg, .modeTitle svg { font-size: 16px; }
-.entry button:hover:not(:disabled), .header button:hover:not(:disabled), .actions button:hover:not(:disabled), .problems button:hover:not(:disabled) { background: rgba(255,255,255,.06); color: var(--text-primary); }
-.entry button:disabled, .header button:disabled, .actions button:disabled, .problems button:disabled { opacity: .45; cursor: not-allowed; }
-.container { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.025); }
-.searchHeading .container { margin-bottom: 0; }
-.header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.modeTitle { display: inline-flex; align-items: center; gap: 5px; color: var(--text-primary); font-size: 12px; font-weight: 500; }
-.header button.exit { min-height: 26px; padding: 3px 6px; border-color: transparent; }
-.actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.selectionControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.selectAll { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+.entry > button svg, .primary svg { font-size: 16px; }
+.entry > button:hover:not(:disabled), .header > button:hover:not(:disabled), .actions > button:hover:not(:disabled), .problems button:hover:not(:disabled) { background: rgba(255,255,255,.06); color: var(--text-primary); }
+.entry > button:disabled, .header > button:disabled, .actions > button:disabled, .problems button:disabled { opacity: .45; cursor: not-allowed; }
+.container { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 6px; container: batch-actions / inline-size; }
+.toolbar { display: flex; flex-direction: column; gap: 6px; }
+.header, .actions { display: flex; align-items: center; gap: 6px; }
+.leading { flex: 1; min-width: 0; }
+.header button.exit { min-height: 30px; padding: 5px 4px; border-color: transparent; }
+.selectAll { display: inline-flex; align-items: center; flex-shrink: 0; gap: 6px; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
 .checkbox { flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--accent-blue, #3A6BFF); cursor: pointer; }
 .checkbox:disabled { cursor: not-allowed; opacity: .5; }
-.checkbox:focus-visible, .header button:focus-visible, .actions button:focus-visible, .entry button:focus-visible, .problems button:focus-visible { outline: 2px solid var(--accent-blue, #3A6BFF); outline-offset: 3px; }
+.checkbox:focus-visible, .header > button:focus-visible, .actions > button:focus-visible, .entry > button:focus-visible, .problems button:focus-visible { outline: 2px solid var(--accent-blue, #3A6BFF); outline-offset: 3px; }
 .count { margin-left: auto; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .count strong { color: var(--text-primary); font-weight: 600; }
-.actions button.primary { border-color: var(--accent-blue-line); background: var(--accent-blue-soft); color: var(--text-primary); }
-.notice { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.actions button.primary { margin-left: auto; border-color: var(--accent-blue-line); background: var(--accent-blue-soft); color: var(--text-primary); }
+.notice { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .problems { font-size: 11px; color: var(--text-secondary); }
 .problems summary { cursor: pointer; }
-.problems ul { display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow: auto; list-style: none; padding: 0; margin: 10px 0; }
+.problems ul { display: flex; flex-direction: column; gap: 8px; max-height: 120px; overflow: auto; list-style: none; padding: 0; margin: 8px 0; }
 .problems li { display: flex; align-items: center; gap: 8px; }
 .problems li > div { flex: 1; min-width: 0; }
 .problems strong, .problems span { display: block; overflow-wrap: anywhere; }
@@ -35,3 +33,15 @@
 .selectableRow { cursor: pointer; padding-inline: 6px; border-radius: 6px; }
 .selectableRow:hover { background: rgba(255,255,255,.035); }
 .selectedRow, .selectedRow:hover { background: var(--accent-blue-soft); }
+@container batch-actions (min-width: 440px) {
+  .container:not(.withLeading) .toolbar { flex-direction: row; align-items: center; }
+  .container:not(.withLeading) .header, .container:not(.withLeading) .actions { display: contents; }
+  .container:not(.withLeading) .primary { margin-left: 0; }
+  .container:not(.withLeading) .exit { order: 1; }
+}
+@container batch-actions (min-width: 560px) {
+  .withLeading .toolbar { flex-direction: row; align-items: center; }
+  .withLeading .header, .withLeading .actions { display: contents; }
+  .withLeading .primary { margin-left: 0; }
+  .withLeading .exit { order: 1; }
+}

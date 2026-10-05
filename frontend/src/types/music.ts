@@ -39,6 +39,8 @@ export interface QueueSong extends Song {
 }
 
 export interface RecommendationState {
+  available: boolean;
+  disabledReason: string | null;
   enabled: boolean;
   loading: boolean;
   phase: 'heart' | 'roam' | null;

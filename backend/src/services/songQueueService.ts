@@ -11,6 +11,9 @@ export interface QueueDependencies {
   getPlaylistSong?: (candidate: PlaylistCandidate) => Promise<Song | undefined>;
   canPlaySong?: (song: Pick<Song, 'provider'>) => boolean;
   createRecommendationSession?: (provider: MusicProvider, initialSongId?: number) => { nextSongs(): Promise<Song[]> };
+  recommendationsDisabledReason?: string | null;
+  unavailableReason?: (song: Pick<Song, 'provider'>) => string;
+  authorizationChangedReason?: string;
 }
 
 export class SongQueueService {
@@ -43,10 +46,11 @@ export class SongQueueService {
   getPlayback() { return { song: this.currentSong?.song || null, url: this.currentSong?.url || '', startTime: this.currentSong?.startTime || 0, playbackRevision: this.playbackRevision }; }
   private available(song: Pick<Song, 'provider'>) { return this.dependencies.canPlaySong?.(song) ?? true; }
   getQueue() { return [...this.queue, ...this.recommendedQueue].map(song => ({ ...song,
-    unavailableReason: this.available(song) ? null : `房主尚未有效绑定${song.provider === 'qqmusic' ? ' QQ 音乐' : '网易云'}` })); }
+    unavailableReason: this.available(song) ? null : this.dependencies.unavailableReason?.(song) || `房主尚未有效绑定${song.provider === 'qqmusic' ? ' QQ 音乐' : '网易云'}` })); }
   peek() { return this.queue.find(song => this.available(song)) || this.recommendedQueue.find(song => this.available(song)); }
   getRecommendationState(): RecommendationState {
-    return { enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, provider: this.recommendationProvider, queued: this.recommendedQueue.length, error: this.recommendationError, paused: this.mode === 'playlist' };
+    return { available: !this.dependencies.recommendationsDisabledReason, disabledReason: this.dependencies.recommendationsDisabledReason || null,
+      enabled: this.recommendationsEnabled, loading: this.recommendationLoading, phase: this.recommendationPhase, provider: this.recommendationProvider, queued: this.recommendedQueue.length, error: this.recommendationError, paused: this.mode === 'playlist' };
   }
   getPlaylistState(): PlaylistState {
     return { mode: this.mode, activeEntryId: this.playlists.activeEntryId, entries: this.playlists.snapshots(), loading: this.mode === 'playlist' && this.loading };
@@ -122,7 +126,7 @@ export class SongQueueService {
       if (index >= 0) return queue.splice(index, 1)[0];
     }
   }
-  clear() { this.queue = []; this.stopRecommendations(); }
+  clear() { this.queue = []; this.stopRecommendations(); this.broadcastQueue(); }
   removeById(instanceId: number) {
     const removedRecommendation = this.recommendedQueue.find(song => song.instanceId === instanceId);
     if (removedRecommendation) this.excludeRecommendation(removedRecommendation);
@@ -150,6 +154,7 @@ export class SongQueueService {
 
   async startHeartMode(provider: MusicProvider = 'netease'): Promise<RecommendationState> {
     if (this.disposed) return this.getRecommendationState();
+    if (this.dependencies.recommendationsDisabledReason) throw new HttpError(403, this.dependencies.recommendationsDisabledReason, 'RECOMMENDATIONS_DISABLED');
     if (this.recommendationsEnabled && this.recommendationProvider !== provider) this.stopRecommendations();
     if (!this.recommendationsEnabled) {
       ++this.recommendationGeneration;
@@ -166,6 +171,7 @@ export class SongQueueService {
   }
 
   stopRecommendations() {
+    if (this.dependencies.recommendationsDisabledReason) return this.getRecommendationState();
     ++this.recommendationGeneration;
     this.recommendationsEnabled = false;
     this.recommendationLoading = false;
@@ -214,7 +220,7 @@ export class SongQueueService {
 
   private refillRecommendations(): Promise<void> {
     const session = this.heartModeSession;
-    if (this.mode !== 'regular' || !this.recommendationsEnabled || !session || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
+    if (this.dependencies.recommendationsDisabledReason || this.mode !== 'regular' || !this.recommendationsEnabled || !session || this.refillRetryTimer || this.recommendedQueue.length > 2) return Promise.resolve();
     if (this.refillTask) return this.refillTask;
     const generation = this.recommendationGeneration;
     this.recommendationLoading = true;
@@ -306,7 +312,7 @@ export class SongQueueService {
         this.loadingSong = nextSong;
       }
       if (!nextSong) throw new Error('No next song');
-      if (!this.available(nextSong)) throw new HttpError(409, '房主对应平台授权不可用', 'MUSIC_BINDING_REQUIRED');
+      if (!this.available(nextSong)) throw new HttpError(409, this.dependencies.unavailableReason?.(nextSong) || '房主对应平台授权不可用', 'MUSIC_BINDING_REQUIRED');
       const playInfo = await this.dependencies.getPlayInfo(String(nextSong.id), nextSong);
       if (generation !== this.generation) return;
       if (nextSong.source === 'heart' && (!this.recommendationsEnabled || recommendationGeneration !== this.recommendationGeneration || this.queue.some(song => this.available(song)))) {
@@ -390,7 +396,7 @@ export class SongQueueService {
     if ((!provider || selected === provider) && this.loading) {
       this.cancelPendingSelection();
     }
-    if (provider) this.playlists.invalidateProvider(provider);
+    if (provider) this.playlists.invalidateProvider(provider, this.dependencies.authorizationChangedReason);
     if (!provider || this.recommendationProvider === provider) {
       this.excludedRecommendationIds = this.excludedRecommendationIds.filter(id => provider && !id.startsWith(provider + ':'));
       this.stopRecommendations();

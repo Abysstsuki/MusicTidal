@@ -21,6 +21,7 @@ const PAGE_SIZE = 10;
 export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const { enqueue, requestRoom, room } = useMusicContext();
   const providers = room?.enabledProviders || (room?.binding.status === 'bound' ? ['netease'] as MusicProvider[] : []);
+  const unavailableReason = room?.kind === 'super' ? '超级房间公共播放授权暂不可用' : '房主尚未绑定音乐账号';
   const scope = providers.join(',') + ':' + JSON.stringify(room?.bindings || room?.binding);
   const { showToast } = useToast();
   const [query, setQuery] = useState('');
@@ -65,7 +66,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const submit = (event: FormEvent) => { event.preventDefault(); void search(query.trim()); };
   return <div className="search-content">
     <div className={batchStyles.searchHeading}>
-      {!batch.active && <p className={batchStyles.scope}>{providers.length ? '搜索范围：' + providers.map(providerName).join(' + ') : '房主尚未绑定音乐账号，请先绑定后搜索'}</p>}
+      {!batch.active && <p className={batchStyles.scope}>{providers.length ? '搜索范围：' + providers.map(providerName).join(' + ') : unavailableReason + (room?.kind === 'super' ? '，请等待授权恢复' : '，请先绑定后搜索')}</p>}
       <BatchSongActions batch={batch} loading={loading} canStart={providers.length > 0} />
     </div>
     <form className="song-search" onSubmit={submit}>
@@ -73,7 +74,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
       <input ref={inputRef} aria-label="搜索歌曲或歌手" placeholder="搜索歌曲或歌手…" value={query} disabled={batch.pending || pending !== null} onChange={event => setQuery(event.target.value)} maxLength={100} />
       <button type="submit" disabled={!providers.length || loading || batch.pending || pending !== null || !query.trim()}>{loading ? '搜索中' : '搜索'}</button>
     </form>
-    {batch.active && <p className={batchStyles.searchHint}>{providers.length ? '翻页保留选择 · 更换关键词清空已选 · ' + providers.map(providerName).join(' + ') : '房主尚未绑定音乐账号，已选歌曲暂不可入队'}</p>}
+    {batch.active && <p className={batchStyles.searchHint}>{providers.length ? '翻页保留选择 · 更换关键词清空已选 · ' + providers.map(providerName).join(' + ') : unavailableReason + '，已选歌曲暂不可入队'}</p>}
     <div className="song-list" aria-busy={loading}>
       {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '搜索歌曲'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map((song, index) => <div className={'song-row' + (batch.active ? ' ' + batchStyles.selectableRow : '') + (batch.selected.has(songKey(song)) ? ' ' + batchStyles.selectedRow : '')} key={songKey(song)}
         onClick={event => { if (batch.active && !(event.target as Element).closest('button, input, a, label')) batch.toggle(song, index); }}>

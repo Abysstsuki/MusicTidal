@@ -11,7 +11,7 @@ export const getSongLyricHandler = async (req: Request, res: Response): Promise<
     }
     
     try {
-        const lyricData = await getSongLyric(songId, (res.locals.room as Room).client);
+        const lyricData = await getSongLyric(songId, (res.locals.room as Room).catalogClient);
         res.json({ success: true, data: lyricData });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch song lyric' });

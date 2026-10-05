@@ -54,7 +54,7 @@ export default function RoomActionDialog({ action, active, name, password, busy,
       <button className="icon-button" type="button" disabled={busy} aria-label="关闭房间操作" onClick={close}><CloseRounded /></button>
     </div>
 
-    {room && <div className="room-dialog-meta"><span className="room-dialog-host">房主 · {room.host.username}</span><span>{room.onlineCount} 人在线</span><span className="room-dialog-access">{room.locked ? '密码保护' : '开放房间'}</span></div>}
+    {room && <div className="room-dialog-meta"><span className="room-dialog-host">{room.kind === 'super' ? '超级房间 · 无房主' : '房主 · ' + room.host?.username}</span><span>{room.onlineCount} 人在线</span><span className="room-dialog-access">{room.locked ? '密码保护' : '开放房间'}</span></div>}
     <p className="room-dialog-description">{switching ? '你已加入另一个房间，请先选择接下来的操作。' : creating ? '给房间起个名字，邀请朋友一起听歌。' : room?.locked ? '输入房间密码，加入大家的同步播放。' : '与房间成员同步听歌，共享队列和聊天。'}</p>
 
     {switching && active ? <ActiveRoomChoice room={active} onLeft={onLeft} /> : creating ? <form className="room-dialog-form" onSubmit={onCreate}>

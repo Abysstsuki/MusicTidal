@@ -18,7 +18,7 @@ const router = express.Router({ mergeParams: true });
 router.post('/mode', (req: AuthRequest, res) => {
     const mode = req.body?.mode;
     if (mode !== 'regular' && mode !== 'playlist') throw new HttpError(400, '播放模式无效');
-    const room = roomManager.host(String(req.params.roomId), req.user!.userId);
+    const room = roomManager.playbackController(String(req.params.roomId), req.user!.userId);
     room.queue.setMode(mode); res.json(room.queue.getPlaylistState());
 });
 

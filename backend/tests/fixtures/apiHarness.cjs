@@ -22,6 +22,7 @@ const repository = {
 const prismaPath = require.resolve('../../src/utils/prisma');
 require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: { prisma: { user: repository, $queryRaw: async () => [{ value: 1 }] } } };
 const { roomManager } = require('../../src/services/roomManager');
+const { SUPER_ROOM_ACCOUNT_USERNAME } = require('../../src/services/roomManager');
 const { neteaseBindings } = require('../../src/services/netease/binding.service');
 const { qqmusicBindings } = require('../../src/services/qqmusic/binding.service');
 const { qqmusicPlaylistCatalog } = require('../../src/services/qqmusic/playlist.service');
@@ -67,6 +68,7 @@ const qqClient = {
   },
 };
 roomManager.qq.clientFactory = () => qqClient;
+roomManager.clientFactory = () => client;
 qqmusicPlaylistCatalog.clientFactory = () => qqClient;
 qqmusicBindings.transport = { createQr: async channel => ({ channel, image: 'data:image/png;base64,fixture' }),
   pollQr: async () => ({ status: 'authorized', cookie: 'qqmusic_uin=9007199254740993123; qqmusic_key=fixture' }), client: () => qqClient };
@@ -93,7 +95,18 @@ app.get('/fixture/audio', (req, res) => {
   } else res.send(audio);
 });
 
-async function start({ port = 0, seed = false } = {}) {
+async function bind(id, provider = 'netease') {
+  Object.assign(users.get(id), { [provider + 'CookieEncrypted']: encryptCredential(provider === 'netease' ? 'MUSIC_U=fixture' + id : 'qqmusic_uin=' + id + '; qqmusic_key=fixture'),
+    [provider + 'Profile']: { uid: '7', nickname: provider + ' fixture', avatarUrl: '' }, [provider + 'BoundAt']: new Date(), [provider + 'InvalidAt']: null });
+  await roomManager.refreshAuthorization(id, provider);
+}
+async function start({ port = 0, seed = false, superRoom = false } = {}) {
+  if (superRoom) {
+    users.set(4, { ...users.get(1), id: 4, username: SUPER_ROOM_ACCOUNT_USERNAME, email: 'playback@musictidal.test' });
+    await bind(4); await bind(4, 'qqmusic');
+    const room = await roomManager.initializeSuperRoom();
+    room.anonymousClient = client; room.anonymousQqmusicClient.dispose(); room.anonymousQqmusicClient = qqClient;
+  }
   const server = http.createServer(app); const wss = setupWebSocketServer(server);
   await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
   origin = 'http://127.0.0.1:' + server.address().port;
@@ -103,14 +116,9 @@ async function start({ port = 0, seed = false } = {}) {
     roomManager.connect(a.id, 2, { send() {}, close() {} }); roomManager.connect(b.id, 3, { send() {}, close() {} });
     a.queue.enqueue({ id: 10, name: '演示歌曲 10', artist: 'MusicTidal', prcUrl: '', duration: 300000 });
   }
-  return { origin, roomManager, qqClient,
-    bind: async (id, provider = 'netease') => {
-      Object.assign(users.get(id), { [provider + 'CookieEncrypted']: encryptCredential(provider === 'netease' ? 'MUSIC_U=fixture' : 'qqmusic_uin=7; qqmusic_key=fixture'),
-        [provider + 'Profile']: { uid: '7', nickname: provider + ' fixture', avatarUrl: '' }, [provider + 'BoundAt']: new Date(), [provider + 'InvalidAt']: null });
-      await roomManager.refreshAuthorization(id, provider); const active = roomManager.active(id); if (active) roomManager.get(active.id).client = client;
-    },
+  return { origin, roomManager, qqClient, client, bind,
     token: id => jwt.sign({ userId: id }, process.env.JWT_SECRET, { expiresIn: '1h' }),
     close: async () => { roomManager.dispose(); neteaseBindings.dispose(); qqmusicBindings.dispose(); for (const ws of wss.clients) ws.terminate(); await Promise.all([new Promise(resolve => wss.close(resolve)), new Promise(resolve => server.close(resolve))]); } };
 }
 module.exports = { start };
-if (require.main === module) start({ port: 3101, seed: true }).then(() => console.log('Isolated room UI fixtures ready on port 3101; PID ' + process.pid));
+if (require.main === module) start({ port: 3101, seed: true, superRoom: true }).then(() => console.log('Isolated room UI fixtures ready on port 3101; PID ' + process.pid));

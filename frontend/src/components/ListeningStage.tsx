@@ -17,6 +17,7 @@ import OnlineUser from '@/components/onlineuser';
 import MusicReq from '@/components/musicreq';
 import { useMusicContext } from '@/contexts/MusicContext';
 import { useToast } from '@/contexts/ToastContext';
+import { ApiError } from '@/lib/api';
 import NeteaseBinding from './NeteaseBinding';
 import LeaveRoomDialog from './LeaveRoomDialog';
 import RoomClosureNotice from './RoomClosureNotice';
@@ -44,7 +45,16 @@ export default function ListeningStage() {
   const [leaveError, setLeaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
   const requestLeave = () => { if (!leaving) { setLeaveError(''); setShowLeave(true); } };
-  const leave = async () => { if (leaving) return; setLeaving(true); setLeaveError(''); try { await leaveRoom(); } catch (error) { setLeaveError((error as Error).message); setLeaving(false); } };
+  const leave = async () => {
+    if (leaving) return;
+    setLeaving(true); setLeaveError('');
+    try { await leaveRoom(); }
+    catch (error) {
+      setLeaveError(error instanceof ApiError ? error.message : error instanceof TypeError
+        ? '网络连接失败，请检查网络后重试' : '暂时无法离开房间，请稍后重试');
+      setLeaving(false);
+    }
+  };
   const invite = async () => {
     if (!room || !user) return;
     if (room.locked && !room.inviteToken) {
@@ -131,8 +141,8 @@ export default function ListeningStage() {
           </div>
         </header>
         <div className="room-toolbar">
-          <div><strong>{room?.name}</strong><span>{isHost ? '你是房主' : '房主 · ' + room?.host.username}</span></div>
-          <span className="room-auth-state">{room?.enabledProviders?.length ? '房主授权 · ' + room.enabledProviders.map(provider => provider === 'qqmusic' ? 'QQ 音乐' : '网易云').join(' / ') : '房主尚未绑定音乐账号'}</span>
+          <div><strong>{room?.name}</strong><span>{room?.kind === 'super' ? '无房主 · 全员协作' : isHost ? '你是房主' : '房主 · ' + room?.host?.username}</span></div>
+          <span className={'room-auth-state' + (room?.kind === 'super' ? ' super-room-auth' : '')}>{room?.enabledProviders?.length ? (room.kind === 'super' ? '公共播放授权 · ' : '房主授权 · ') + room.enabledProviders.map(provider => provider === 'qqmusic' ? 'QQ 音乐' : '网易云').join(' / ') : room?.kind === 'super' ? '公共播放授权暂不可用' : '房主尚未绑定音乐账号'}</span>
           <button className="pill-button" onClick={() => void invite()}>邀请</button>
           <button className="pill-button" onClick={() => setShowBinding(true)}>音乐账号</button>
           <button className="pill-button" disabled={leaving} onClick={requestLeave}>{leaving ? '正在离开…' : '离开房间'}</button>

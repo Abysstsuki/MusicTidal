@@ -13,7 +13,7 @@ export const searchSongHandler = async (req: Request, res: Response): Promise<vo
     }
 
     try {
-        const { songs, total } = await searchSongByKeyword(keywords, offset, limit, (res.locals.room as Room).client);
+        const { songs, total } = await searchSongByKeyword(keywords, offset, limit, (res.locals.room as Room).catalogClient);
         res.json({ success: true, data: songs, total, offset, limit });
     } catch (err: any) {
         res.status(502).json({ success: false, error: '歌曲暂时无法搜索，请稍后重试' });

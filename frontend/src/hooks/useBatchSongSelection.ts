@@ -32,7 +32,7 @@ export function useBatchSongSelection({ songs, page, contextKey, visible = true,
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const available = (song: Song) => (room?.bindings?.[song.provider || 'netease'] ||
     ((song.provider || 'netease') === 'netease' ? room?.binding : undefined))?.status === 'bound';
-  const unavailableReason = (song: Song) => available(song) ? '' : '房主尚未有效绑定' + providerName(song.provider);
+  const unavailableReason = (song: Song) => available(song) ? '' : room?.kind === 'super' ? '超级房间' + providerName(song.provider) + '播放授权暂不可用' : '房主尚未有效绑定' + providerName(song.provider);
   const locked = pending || disabled;
   const items = [...selected.values()].sort((a, b) => a.page - b.page || a.index - b.index);
   const eligiblePage = songs.filter(available);

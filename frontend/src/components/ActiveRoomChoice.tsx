@@ -10,7 +10,7 @@ export default function ActiveRoomChoice({ room, onLeft }: { room: RoomSummary; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
-  const isHost = user?.id === room.host.id;
+  const isHost = Boolean(room.host && user?.id === room.host.id);
   const leave = async () => {
     setBusy(true); setError('');
     try { await apiRequest('/api/rooms/' + room.id + '/leave', { method: 'POST' }); setConfirming(false); onLeft(); }

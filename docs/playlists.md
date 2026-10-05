@@ -1,7 +1,8 @@
 # Room playlists
 
-The header's playlist browser uses the signed-in member's Netease binding, not
-the host's binding. Unbound members can search and inspect public playlists.
+The header's playlist browser uses the signed-in member's personal binding for
+the selected platform. Listing, searching, inspecting and sharing playlists
+require that member's valid binding.
 The liked playlist is identified by specialType=5 and its owner's UID.
 Sharing a playlist adds an in-memory room directory entry with its source user
 ID and a track-ID snapshot. Members can inspect the shared entry; the source
@@ -39,6 +40,25 @@ only the regular queue. Clients exit rooms only for ROOM_CLOSED/NOT_MEMBER,
 not for missing playlists. Netease binding errors use 409 rather than JWT 401.
 Backend restart clears all playlist entries and progress. No database migration
 or separate Netease API process is required. Deploy backend/vendor with dist.
+
+## Permanent super room
+
+`super-room` has no host. Every admitted member can activate/remove entries,
+change playback modes and adjust sequential/shuffle/repeat settings. Directory
+controls work without opening track details or requiring a personal binding.
+Both platforms' automatic recommendations are permanently disabled.
+
+Shared track pages validate the viewer's own binding and playlist access, then
+read a page of the imported track-ID snapshot using that viewer's credential.
+There is no fallback to the adder or the room's playback account. An unbound
+member can listen and control existing entries but cannot inspect tracks or
+import a playlist. Unavailable/private playlists return a clear access error.
+
+Server continuation reads metadata and playable URLs using the public playback
+credential and the imported ID snapshot. It never consults the adder's library;
+leaving or unbinding by the adder does not pause the shared entry. Playback
+authorization changes can pause that platform's entries until reactivated.
+Search and lyrics use anonymous clients. All transient state resets on restart.
 
 ## Local verification
 

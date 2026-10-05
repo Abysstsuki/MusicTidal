@@ -8,7 +8,7 @@ export interface NeteaseBinding {
   boundAt: string | null;
 }
 export interface RoomSummary {
-  id: string; name: string; host: { id: number; username: string }; locked: boolean; onlineCount: number;
+  id: string; name: string; kind: 'normal' | 'super'; host: { id: number; username: string } | null; locked: boolean; onlineCount: number;
   currentSong: Pick<Song, 'id' | 'name' | 'artist' | 'prcUrl' | 'provider' | 'access' | 'trial'> | null;
   hostDisconnectedUntil: number | null;
   hostGracePeriodMs?: number;

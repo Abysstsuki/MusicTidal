@@ -5,7 +5,7 @@
 .tabs button { border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; background: transparent; color: var(--text-secondary); font-size: 11px; }
 .tabs button.selected { background: var(--accent-blue-soft); border-color: var(--accent-blue-line); color: var(--text-primary); }
 .tabs button:disabled { opacity: .45; }
-.back { display: inline-flex; align-items: center; align-self: flex-start; padding: 0; gap: 4px; border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; }
+.back { display: inline-flex; align-items: center; align-self: flex-start; padding: 0; gap: 4px; border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
 .detailHeading { display: flex; align-items: center; gap: 10px; }
 .detailCopy { flex: 1; min-width: 0; }
 .detailCopy strong, .detailCopy span, .detailCopy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

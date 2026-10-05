@@ -20,7 +20,7 @@ const catalogFor = (provider: unknown) => musicProvider(provider) === 'qqmusic' 
 
 export const roomPlaylistRoutes = Router({ mergeParams: true });
 const member = (req: AuthRequest) => roomManager.member(String(req.params.roomId), req.user!.userId);
-const host = (req: AuthRequest) => roomManager.host(String(req.params.roomId), req.user!.userId);
+const controller = (req: AuthRequest) => roomManager.playbackController(String(req.params.roomId), req.user!.userId);
 roomPlaylistRoutes.get('/', (req: AuthRequest, res) => { res.json(member(req).queue.getPlaylistState()); });
 roomPlaylistRoutes.post('/', async (req: AuthRequest, res) => {
   const provider = musicProvider(req.body?.provider); member(req).requireProvider(provider);
@@ -33,19 +33,20 @@ roomPlaylistRoutes.post('/', async (req: AuthRequest, res) => {
 roomPlaylistRoutes.get('/:entryId/tracks', async (req: AuthRequest, res) => {
   const room = member(req), entry = room.queue.playlists.get(String(req.params.entryId)), page = pagination(req.query);
   const catalog = catalogFor(entry.index.playlist.provider);
-  await catalog.index(entry.addedBy.id, entry.index.playlist.id);
-  const items = await catalog.songs(entry.addedBy.id, entry.index.trackIds.slice(page.offset, page.offset + page.limit));
+  const readerId = room.kind === 'super' ? req.user!.userId : entry.addedBy.id;
+  await catalog.index(readerId, entry.index.playlist.id);
+  const items = await catalog.songs(readerId, entry.index.trackIds.slice(page.offset, page.offset + page.limit));
   member(req).queue.playlists.get(entry.entryId);
   res.json({ playlist: entry.index.playlist, items, ...page, total: entry.index.trackIds.length, hasMore: page.offset + page.limit < entry.index.trackIds.length });
 });
 roomPlaylistRoutes.post('/:entryId/activate', async (req: AuthRequest, res) => {
-  const room = host(req), entry = room.queue.playlists.get(String(req.params.entryId));
+  const room = controller(req), entry = room.queue.playlists.get(String(req.params.entryId));
   const provider = musicProvider(entry.index.playlist.provider); room.requireProvider(provider);
-  await catalogFor(provider).index(entry.addedBy.id, entry.index.playlist.id);
-  host(req).requireProvider(provider); room.queue.activatePlaylist(entry.entryId); res.json(room.queue.getPlaylistState());
+  if (room.kind !== 'super') await catalogFor(provider).index(entry.addedBy.id, entry.index.playlist.id);
+  controller(req).requireProvider(provider); room.queue.activatePlaylist(entry.entryId); res.json(room.queue.getPlaylistState());
 });
 roomPlaylistRoutes.patch('/:entryId/settings', (req: AuthRequest, res) => {
-  const room = host(req), order = req.body?.order, repeat = req.body?.repeat;
+  const room = controller(req), order = req.body?.order, repeat = req.body?.repeat;
   if ((order !== undefined && order !== 'sequential' && order !== 'shuffle') || (repeat !== undefined && typeof repeat !== 'boolean') || (order === undefined && repeat === undefined)) throw new HttpError(400, '播放设置无效');
   room.queue.setPlaylistSettings(String(req.params.entryId), order, repeat); res.json(room.queue.getPlaylistState());
 });
@@ -54,5 +55,5 @@ roomPlaylistRoutes.post('/:entryId/next', (req: AuthRequest, res) => {
   room.queue.nominatePlaylistSong(String(req.params.entryId), positiveId(req.body?.songId)); res.json(room.queue.getPlaylistState());
 });
 roomPlaylistRoutes.delete('/:entryId', (req: AuthRequest, res) => {
-  const room = host(req); room.queue.removePlaylist(String(req.params.entryId)); res.json(room.queue.getPlaylistState());
+  const room = controller(req); room.queue.removePlaylist(String(req.params.entryId)); res.json(room.queue.getPlaylistState());
 });

@@ -16,7 +16,7 @@ router.get('/song/search', async (req, res) => {
     const { limit } = pagination({ offset, limit: page.limit });
     const version = provider === 'netease' ? room.credentialVersion : room.qqmusicVersion;
     try {
-      const data = provider === 'netease' ? await searchSongByKeyword(keywords, offset, limit, room.client) : await room.qqmusicClient.search(keywords, offset, limit);
+      const data = provider === 'netease' ? await searchSongByKeyword(keywords, offset, limit, room.catalogClient) : await room.catalogQqmusicClient.search(keywords, offset, limit);
       if (room.closed || version !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) throw new HttpError(409, '音乐绑定已变化，请重新搜索');
       providers[provider] = { ...data, offset, limit, hasMore: offset + limit < data.total, error: null };
     } catch (error) { providers[provider] = { songs: [], total: null, offset, limit, hasMore: false,
@@ -38,6 +38,6 @@ router.get('/song/url', async (req, res) => {
 router.get('/lyric', async (req, res) => {
   const room = res.locals.room as Room, provider = musicProvider(req.query.provider), id = positiveId(req.query.id);
   room.requireProvider(provider);
-  res.json(provider === 'netease' ? await getSongLyric(String(id), room.client) : await room.qqmusicClient.lyric(id));
+  res.json(provider === 'netease' ? await getSongLyric(String(id), room.catalogClient) : await room.catalogQqmusicClient.lyric(id));
 });
 export default router;

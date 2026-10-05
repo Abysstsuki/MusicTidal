@@ -22,6 +22,7 @@ export default function RoomCardTrack({ room }: { room: RoomSummary }) {
             <span>{privateArtists[(seed >>> 8) % privateArtists.length]}</span>
           </div>
         </div>
+        <span className="room-track-private-label">歌曲详情入房后可见</span>
       </div>
     );
   }
@@ -30,8 +31,8 @@ export default function RoomCardTrack({ room }: { room: RoomSummary }) {
     <div className="room-card-track">
       <SongCover src={room.currentSong?.prcUrl} />
       <div>
-        <strong>{room.currentSong?.name || '等待第一首歌'}</strong>
-        <span>{room.currentSong?.artist || '入房后可以点歌'}</span>
+        <strong title={room.currentSong?.name}>{room.currentSong?.name || '等待第一首歌'}</strong>
+        <span title={room.currentSong?.artist}>{room.currentSong?.artist || '入房后可以点歌'}</span>
       </div>
     </div>
   );

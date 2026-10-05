@@ -30,8 +30,9 @@ export const addSongToQueue = async (req: Request, res: Response) => {
     if (!metadata) throw new HttpError(502, '网易云歌曲详情不可用');
     song = neteaseSong(metadata, data.privileges?.find((item: any) => Number(item.id) === raw.id));
   }
+  roomFor(req);
   room.requireProvider(provider);
-  if (room.closed || version !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) throw new HttpError(409, '房主授权已变化，请重新点歌');
+  if (room.closed || version !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) throw new HttpError(409, room.kind === 'super' ? '公共播放授权已变化，请重新点歌' : '房主授权已变化，请重新点歌');
   res.json({ success: true, song: room.queue.enqueue(song) });
 };
 
@@ -86,9 +87,9 @@ export const addSongsToQueue = async (req: Request, res: Response) => {
   for (const reference of references) {
     const provider = reference.provider;
     if (versions[provider] !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) {
-      reject(reference, 'MUSIC_AUTHORIZATION_CHANGED', '房主授权已变化，请重试');
+      reject(reference, 'MUSIC_AUTHORIZATION_CHANGED', room.kind === 'super' ? '公共播放授权已变化，请重试' : '房主授权已变化，请重试');
     } else if (room.bindingFor(provider).status !== 'bound') {
-      reject(reference, 'MUSIC_BINDING_REQUIRED', `房主尚未有效绑定${provider === 'qqmusic' ? 'QQ 音乐' : '网易云'}`);
+      reject(reference, 'MUSIC_BINDING_REQUIRED', room.providerUnavailableReason(provider));
     }
   }
   const songs = references.flatMap(item => !failures.has(songKey(item)) && prepared.has(songKey(item)) ? [prepared.get(songKey(item))!] : []);
@@ -111,11 +112,14 @@ export const skipToNextHandler = (req: Request, res: Response) => {
   res.json({ success: true, playback: room.queue.getPlayback() });
 };
 export const startHeartModeHandler = async (req: Request, res: Response) => {
+  const memberRoom = roomFor(req), state = memberRoom.queue.getRecommendationState();
+  if (!state.available) throw new HttpError(403, state.disabledReason!, 'RECOMMENDATIONS_DISABLED');
   const room = roomManager.host(String(req.params.roomId), (req as AuthRequest).user!.userId);
   const provider = musicProvider(req.body?.provider); room.requireProvider(provider);
   res.json({ success: true, recommendations: await room.queue.startHeartMode(provider) });
 };
 export const stopRecommendationsHandler = (req: Request, res: Response) => {
-  const room = roomManager.host(String(req.params.roomId), (req as AuthRequest).user!.userId);
+  const memberRoom = roomFor(req);
+  const room = memberRoom.kind === 'super' ? memberRoom : roomManager.host(String(req.params.roomId), (req as AuthRequest).user!.userId);
   res.json({ success: true, recommendations: room.queue.stopRecommendations() });
 };

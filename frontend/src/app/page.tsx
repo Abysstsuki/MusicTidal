@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import LockOutlined from '@mui/icons-material/LockOutlined';
 import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
@@ -14,7 +13,7 @@ import UserInfo from '@/components/userinfo';
 import AuthModal from '@/components/authmodal';
 import NeteaseBinding from '@/components/NeteaseBinding';
 import ActiveRoomChoice from '@/components/ActiveRoomChoice';
-import RoomCardTrack from '@/components/RoomCardTrack';
+import RoomLobbyCard from '@/components/RoomLobbyCard';
 import RoomActionDialog, { type RoomAction } from '@/components/RoomActionDialog';
 
 export default function Home() {
@@ -32,7 +31,9 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const needsRoomDialog = action?.kind === 'create' || (action?.kind === 'join' && (action.room.locked || Boolean(active && active.id !== action.room.id)));
   useToastMessage(loadError, { id: 'lobby-load-error', tone: 'error' });
+  useToastMessage(needsRoomDialog ? '' : error, { id: 'lobby-join-error', tone: 'error' });
   const sequence = useRef(0);
   const authCompleted = useRef(false);
   const refresh = useCallback(async (signal?: AbortSignal) => {
@@ -90,24 +91,18 @@ export default function Home() {
     } catch (problem) { await handleProblem(problem); }
     finally { setBusy(false); }
   };
-  const visible = rooms.filter(room => (room.name + room.host.username).toLowerCase().includes(filter.toLowerCase()));
+  const visible = [...rooms.filter(room => room.kind === 'super'), ...rooms.filter(room => room.kind !== 'super' && (room.name + (room.host?.username || '')).toLowerCase().includes(filter.toLowerCase()))];
   return <main className="room-lobby">
     <header className="lobby-header"><Link className="wordmark" href="/">Music<span>Tidal</span></Link><span className="lobby-tagline">多人同步听歌</span><div className="lobby-account">{auth.user && <button className="pill-button" onClick={() => setShowBinding(true)}>音乐账号</button>}<UserInfo /></div></header>
     <section className="lobby-intro"><div><p className="eyebrow">ROOM LOBBY</p><h1>房间大厅</h1><p>选择房间加入，或创建新的房间。</p></div><button className="primary-button" disabled={auth.loading} onClick={() => open({ kind: 'create' })}><AddRounded fontSize="small" />创建房间</button></section>
     {auth.error && <button className="pill-button" onClick={auth.retry}>重试登录状态</button>}
     {active && !action && <ActiveRoomChoice room={active} onLeft={() => { setActive(null); void refresh(); }} />}
     <section className="lobby-rooms" aria-label="房间列表"><div className="lobby-list-heading"><h2>房间 <span>{rooms.length}</span></h2><div><input aria-label="搜索房间" placeholder="搜索房间或房主" value={filter} onChange={event => setFilter(event.target.value)} /><button className="icon-button" aria-label="刷新房间列表" onClick={() => void refresh()}><RefreshRounded /></button></div></div>
-      {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <article className="room-card" key={room.id}>
-        <div className="room-card-heading"><span className="room-listening"><HeadphonesRounded fontSize="small" />{room.onlineCount} 人在线</span>{room.locked && <span className="room-lock"><LockOutlined fontSize="small" />密码房间</span>}</div>
-        <h2>{room.name}</h2><p className="room-host">房主 · {room.host.username}</p>
-        <RoomCardTrack room={room} />
-        {room.hostDisconnectedUntil && <p className="room-away">房主暂时离线，等待重连</p>}
-        <button className="room-enter" disabled={busy || auth.loading} onClick={() => open({ kind: 'join', room })}>进入房间 <span>↗</span></button>
-      </article>)}</div>}
+      {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <RoomLobbyCard key={room.id} room={room} current={active?.id === room.id} disabled={busy || auth.loading} joining={busy && action?.kind === 'join' && action.room.id === room.id} onEnter={() => open({ kind: 'join', room })} />)}</div>}
     </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入</footer>
     {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token) => { authCompleted.current = true; auth.login(username, token); setShowAuth(false); }} />}
     {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} />}
-    {action && auth.user && !auth.loading && <RoomActionDialog action={action} active={active} name={name} password={password} busy={busy} error={error}
+    {action && needsRoomDialog && auth.user && !auth.loading && <RoomActionDialog action={action} active={active} name={name} password={password} busy={busy} error={error}
       onNameChange={setName} onPasswordChange={setPassword} onClose={() => { setAction(null); setPassword(''); }} onCreate={event => void create(event)}
       onJoin={() => { if (action.kind === 'join') void enter(action.room); }}
       onLeft={() => { setActive(null); setError(''); if (action.kind === 'join' && !action.room.locked) void enter(action.room); }} />}

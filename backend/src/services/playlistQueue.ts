@@ -78,10 +78,10 @@ export class PlaylistQueue {
     }
     return active;
   }
-  invalidateProvider(provider: MusicProvider) {
+  invalidateProvider(provider: MusicProvider, reason = '房主的对应平台授权已变化，请重新激活歌单') {
     let active = false;
     for (const entry of this.entries.values()) if ((entry.index.playlist.provider || 'netease') === provider) {
-      this.block(entry.entryId, '房主的对应平台授权已变化，请重新激活歌单');
+      this.block(entry.entryId, reason);
       if (entry.entryId === this.activeEntryId) active = true;
     }
     return active;

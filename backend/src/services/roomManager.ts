@@ -11,9 +11,14 @@ import { qqmusicPlaylistCatalog } from './qqmusic/playlist.service';
 import { qqmusicBindings } from './qqmusic/binding.service';
 import { createQqMusicClient, QqMusicClient } from '../utils/qqmusicHttp';
 import type { MusicProvider } from '../types/song';
-import { providerName } from './music/song';
+import { providerName, neteaseSong, qqSong } from './music/song';
+import { prisma } from '../utils/prisma';
 
 export const RECONNECT_GRACE_MS = 180_000;
+export const SUPER_ROOM_ID = 'super-room';
+export const SUPER_ROOM_ACCOUNT_USERNAME = 'Abyss';
+export const SUPER_ROOM_RECOMMENDATIONS_DISABLED = '超级房间仅支持点歌与歌单播放，所有自动推荐续播均已禁用。';
+export type RoomKind = 'normal' | 'super';
 export type RoomUser = { id: number; username: string };
 export type RoomEvent = { type: string; roomId: string; revision: number; payload: any };
 export interface RoomConnection { send(event: RoomEvent): void; close(): void }
@@ -23,7 +28,8 @@ type QqDependencies = { credentials: (id: number) => Promise<Credential>; invali
 
 export class Room {
   readonly queue: SongQueueService;
-  readonly host: RoomUser;
+  readonly host: RoomUser | null;
+  authorizationUserId: number | null;
   private readonly inviteToken: string | null;
   readonly members = new Map<number, Member>();
   readonly messages: { id: string; userId: number; username: string; text: string }[] = [];
@@ -31,16 +37,22 @@ export class Room {
   binding: BindingStatus = { status: 'unbound', profile: null, boundAt: null };
   qqmusicBinding: BindingStatus = { status: 'unbound', profile: null, boundAt: null };
   qqmusicClient: QqMusicClient = createQqMusicClient('');
+  anonymousClient: NeteaseClient = createNeteaseClient('');
+  anonymousQqmusicClient: QqMusicClient = createQqMusicClient('');
   qqmusicVersion = 0;
   qqmusicAuthorizationTask: Promise<void> | null = null;
   revision = 0;
   closed = false;
   credentialVersion = 0;
   authorizationTask: Promise<void> | null = null;
-  constructor(readonly id: string, readonly name: string, host: RoomUser, readonly passwordHash: string | null) {
-    this.host = { id: host.id, username: host.username };
+  constructor(readonly id: string, readonly name: string, host: RoomUser | null, readonly passwordHash: string | null, readonly kind: RoomKind = 'normal') {
+    this.host = host ? { id: host.id, username: host.username } : null;
+    this.authorizationUserId = host?.id ?? null;
     this.inviteToken = passwordHash ? randomBytes(32).toString('hex') : null;
     this.queue = new SongQueueService({
+      recommendationsDisabledReason: kind === 'super' ? SUPER_ROOM_RECOMMENDATIONS_DISABLED : null,
+      authorizationChangedReason: kind === 'super' ? '公共播放授权已变化，请重新激活歌单' : undefined,
+      unavailableReason: song => this.providerUnavailableReason(song.provider || 'netease'),
       canPlaySong: song => this.bindingFor(song.provider || 'netease').status === 'bound',
       getPlayInfo: async (id, song) => {
         const provider = song?.provider || 'netease';
@@ -58,6 +70,12 @@ export class Room {
       getPlaylistSong: async candidate => {
         const catalog = candidate.provider === 'qqmusic' ? qqmusicPlaylistCatalog : playlistCatalog;
         this.requireProvider(candidate.provider || 'netease');
+        if (this.kind === 'super') {
+          if (candidate.provider === 'qqmusic') return (await this.qqmusicClient.details([candidate.songId])).map(qqSong)[0];
+          const { data } = await this.client.get('/song/detail', { params: { ids: String(candidate.songId) } });
+          const raw = data?.songs?.find((song: any) => Number(song.id) === candidate.songId);
+          return raw ? neteaseSong(raw, data.privileges?.find((song: any) => Number(song.id) === candidate.songId)) : undefined;
+        }
         await catalog.index(candidate.userId, candidate.playlistId);
         return (await catalog.songs(candidate.userId, [candidate.songId]))[0];
       },
@@ -66,18 +84,25 @@ export class Room {
   }
   summary() {
     const song = this.queue.getCurrentSong()?.song;
-    return { id: this.id, name: this.name, host: this.host, locked: Boolean(this.passwordHash),
+    return { id: this.id, name: this.name, kind: this.kind, host: this.host, locked: Boolean(this.passwordHash),
       onlineCount: this.onlineMembers().length,
       currentSong: song ? { id: song.id, provider: song.provider || 'netease', access: song.access, trial: song.trial, name: song.name, artist: song.artist, prcUrl: song.prcUrl } : null,
-      hostDisconnectedUntil: this.members.get(this.host.id)?.expiresAt || null,
-      hostGracePeriodMs: RECONNECT_GRACE_MS };
+      hostDisconnectedUntil: this.host ? this.members.get(this.host.id)?.expiresAt || null : null,
+      hostGracePeriodMs: this.host ? RECONNECT_GRACE_MS : 0 };
   }
-  onlineMembers() { return [...this.members.values()].filter(member => member.connections.size > 0).map(member => ({ id: member.id, username: member.username, isHost: member.id === this.host.id })); }
+  onlineMembers() { return [...this.members.values()].filter(member => member.connections.size > 0).map(member => ({ id: member.id, username: member.username, isHost: member.id === this.host?.id })); }
+  get catalogClient() { return this.kind === 'super' ? this.anonymousClient : this.client; }
+  get catalogQqmusicClient() { return this.kind === 'super' ? this.anonymousQqmusicClient : this.qqmusicClient; }
   bindingFor(provider: MusicProvider) { return provider === 'netease' ? this.binding : this.qqmusicBinding; }
-  requireProvider(provider: MusicProvider) {
-    if (this.bindingFor(provider).status !== 'bound') throw new HttpError(409, `房主尚未有效绑定${providerName(provider)}`, 'MUSIC_BINDING_REQUIRED');
+  providerUnavailableReason(provider: MusicProvider) {
+    return this.kind === 'super' ? `超级房间${providerName(provider)}播放授权暂不可用` : `房主尚未有效绑定${providerName(provider)}`;
   }
-  info() { return { ...this.summary(), binding: this.binding, bindings: { netease: this.binding, qqmusic: this.qqmusicBinding },
+  requireProvider(provider: MusicProvider) {
+    if (this.bindingFor(provider).status !== 'bound') throw new HttpError(409, this.providerUnavailableReason(provider), 'MUSIC_BINDING_REQUIRED');
+  }
+  info() {
+    const publicBinding = (binding: BindingStatus): BindingStatus => this.kind === 'super' ? { status: binding.status, profile: null, boundAt: null } : binding;
+    return { ...this.summary(), binding: publicBinding(this.binding), bindings: { netease: publicBinding(this.binding), qqmusic: publicBinding(this.qqmusicBinding) },
     enabledProviders: (['netease', 'qqmusic'] as MusicProvider[]).filter(provider => this.bindingFor(provider).status === 'bound'), inviteToken: this.inviteToken }; }
   acceptsInvite(token: unknown) {
     return Boolean(this.inviteToken && typeof token === 'string' && /^[a-f0-9]{64}$/.test(token)
@@ -102,13 +127,61 @@ export class Room {
 export class RoomManager {
   private rooms = new Map<string, Room>();
   private activeByUser = new Map<number, string>();
+  private superRoomTask: Promise<void> | null = null;
+  private superRoomRetry: ReturnType<typeof setTimeout> | null = null;
+  private superRoomReady = false;
+  private superRoomLoadedProviders = new Set<MusicProvider>();
+  private disposed = false;
   constructor(private readonly credentials: (userId: number) => Promise<Credential> = id => neteaseBindings.credential(id),
     private readonly invalidate: (userId: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted),
     private readonly clientFactory = createNeteaseClient,
-    private readonly qq?: QqDependencies) {}
+    private readonly qq?: QqDependencies,
+    private readonly superRoomAccount: (username: string) => Promise<{ id: number } | null> = username => prisma.user.findUnique({ where: { username }, select: { id: true } })) {}
+
+  async initializeSuperRoom(): Promise<Room> {
+    if (this.disposed) throw new HttpError(503, '服务已停止');
+    let room = this.rooms.get(SUPER_ROOM_ID);
+    if (!room) {
+      room = new Room(SUPER_ROOM_ID, '超级房间', null, null, 'super');
+      this.rooms.set(room.id, room);
+    }
+    if (!this.superRoomReady && !this.superRoomTask) {
+      this.superRoomTask = this.loadSuperRoomAuthorization(room).finally(() => { this.superRoomTask = null; });
+    }
+    await this.superRoomTask;
+    return room;
+  }
+
+  private async loadSuperRoomAuthorization(room: Room) {
+    try {
+      const account = await this.superRoomAccount(SUPER_ROOM_ACCOUNT_USERNAME);
+      if (this.disposed || room.closed) return;
+      if (!account) throw new Error('Super room account unavailable');
+      if (room.authorizationUserId !== account.id) this.superRoomLoadedProviders.clear();
+      room.authorizationUserId = account.id;
+      const pending = (['netease', 'qqmusic'] as const).filter(provider => !this.superRoomLoadedProviders.has(provider));
+      const results = await Promise.allSettled(pending.map(async provider => {
+        await (provider === 'netease' ? this.refreshRoomAuthorization(room, account.id) : this.refreshQqAuthorization(room, account.id));
+        this.superRoomLoadedProviders.add(provider);
+      }));
+      if (results.some(result => result.status === 'rejected')) throw new Error('Super room authorization unavailable');
+      if (this.disposed || room.closed) return;
+      this.superRoomReady = true;
+      if (this.superRoomRetry) clearTimeout(this.superRoomRetry);
+      this.superRoomRetry = null;
+    } catch {
+      if (this.disposed || room.closed || this.superRoomRetry) return;
+      console.warn('Unable to load super room playback authorization; retrying in 30 seconds.');
+      this.superRoomRetry = setTimeout(() => {
+        this.superRoomRetry = null;
+        void this.initializeSuperRoom().catch(() => {});
+      }, 30_000);
+      this.superRoomRetry.unref?.();
+    }
+  }
 
   list() {
-    return [...this.rooms.values()].map(room => {
+    return [...this.rooms.values()].sort((a, b) => Number(b.kind === 'super') - Number(a.kind === 'super')).map(room => {
       const summary = room.summary();
       return { ...summary, currentSong: summary.locked ? null : summary.currentSong };
     });
@@ -130,8 +203,12 @@ export class RoomManager {
   }
   host(id: string, userId: number) {
     const room = this.member(id, userId);
-    if (room.host.id !== userId) throw new HttpError(403, '只有房主可以执行此操作');
+    if (room.host?.id !== userId) throw new HttpError(403, '只有房主可以执行此操作');
     return room;
+  }
+  playbackController(id: string, userId: number) {
+    const room = this.member(id, userId);
+    return room.kind === 'super' ? room : this.host(id, userId);
   }
   async create(user: RoomUser, name: unknown, password?: unknown) {
     this.ensureAvailable(user.id);
@@ -175,7 +252,7 @@ export class RoomManager {
     member.expiresAt = Date.now() + RECONNECT_GRACE_MS;
     member.timer = setTimeout(() => {
       if (room.closed || room.members.get(member.id) !== member || member.connections.size) return;
-      if (member.id === room.host.id) this.destroy(room.id, '房主离开超过 3 分钟，房间已销毁');
+      if (member.id === room.host?.id) this.destroy(room.id, '房主离开超过 3 分钟，房间已销毁');
       else this.leave(room.id, member.id);
     }, RECONNECT_GRACE_MS);
     member.timer.unref?.();
@@ -201,7 +278,7 @@ export class RoomManager {
     this.activeByUser.delete(userId);
     const connections = [...member.connections];
     member.connections.clear();
-    if (userId === room.host.id) this.scheduleExpiry(room, member);
+    if (userId === room.host?.id) this.scheduleExpiry(room, member);
     else room.members.delete(userId);
     for (const connection of connections) {
       try { connection.send({ type: 'ROOM_CLOSED', roomId: id, revision: ++room.revision, payload: { reason: '你已离开房间' } }); }
@@ -210,13 +287,14 @@ export class RoomManager {
     }
     room.changed();
   }
-  destroy(id: string, reason: string) {
+  destroy(id: string, reason: string, shutdown = false) {
     const room = this.rooms.get(id);
-    if (!room || room.closed) return;
+    if (!room || room.closed || (room.kind === 'super' && !shutdown)) return;
     room.broadcast('ROOM_CLOSED', { reason }); room.closed = true;
     room.queue.dispose(); ++room.credentialVersion;
     room.client.dispose?.();
     ++room.qqmusicVersion; room.qqmusicClient.dispose();
+    room.anonymousClient.dispose?.(); room.anonymousQqmusicClient.dispose();
     this.rooms.delete(id);
     for (const member of room.members.values()) {
       if (member.timer) clearTimeout(member.timer);
@@ -234,6 +312,7 @@ export class RoomManager {
     room.broadcast('chat', message);
   }
   private applyCredential(room: Room, credential: Credential) {
+    const userId = room.authorizationUserId;
     const version = ++room.credentialVersion;
     room.client.dispose?.(true);
     room.binding = credential.binding;
@@ -242,15 +321,17 @@ export class RoomManager {
       ++room.credentialVersion;
       room.binding = { ...room.binding, status: 'expired' }; room.client.dispose?.(true); room.client = this.clientFactory('');
       room.queue.resetAuthorization('netease'); room.changed();
-      void this.invalidate(room.host.id, credential.encrypted).catch(() => console.warn('Unable to persist Netease expiry status.'));
+      if (userId !== null) void this.invalidate(userId, credential.encrypted).catch(() => console.warn('Unable to persist Netease expiry status.'));
     });
     room.queue.resetAuthorization('netease');
     room.changed();
   }
   async refreshAuthorization(userId: number, provider: MusicProvider = 'netease') {
-    for (const room of this.rooms.values()) room.queue.invalidatePlaylistSource(userId, provider);
+    if (this.disposed) return;
+    if (this.rooms.has(SUPER_ROOM_ID) && !this.superRoomReady) await this.initializeSuperRoom();
+    for (const room of this.rooms.values()) if (room.kind !== 'super') room.queue.invalidatePlaylistSource(userId, provider);
     // A host may bind again after leaving; retained rooms must also revoke old credentials.
-    await Promise.all([...this.rooms.values()].filter(room => room.host.id === userId)
+    await Promise.all([...this.rooms.values()].filter(room => room.authorizationUserId === userId)
       .map(room => provider === 'netease' ? this.refreshRoomAuthorization(room, userId) : this.refreshQqAuthorization(room, userId)));
   }
   private async refreshRoomAuthorization(room: Room, userId: number) {
@@ -266,13 +347,14 @@ export class RoomManager {
     await task;
   }
   private applyQqCredential(room: Room, credential: Credential) {
+    const userId = room.authorizationUserId;
     const version = ++room.qqmusicVersion;
     room.qqmusicClient.dispose(); room.qqmusicBinding = credential.binding;
     room.qqmusicClient = (this.qq?.clientFactory || createQqMusicClient)(credential.cookie, () => {
       if (room.closed || version !== room.qqmusicVersion || !credential.encrypted) return;
       ++room.qqmusicVersion; room.qqmusicBinding = { ...room.qqmusicBinding, status: 'expired' };
       room.qqmusicClient.dispose(); room.queue.resetAuthorization('qqmusic'); room.changed();
-      void this.qq?.invalidate(room.host.id, credential.encrypted).catch(() => console.warn('Unable to persist QQ binding expiry.'));
+      if (userId !== null) void this.qq?.invalidate(userId, credential.encrypted).catch(() => console.warn('Unable to persist QQ binding expiry.'));
     });
     room.queue.resetAuthorization('qqmusic'); room.changed();
   }
@@ -286,7 +368,12 @@ export class RoomManager {
     room.qqmusicAuthorizationTask = task;
     room.queue.resetAuthorization('qqmusic'); room.changed(); await task;
   }
-  dispose() { for (const id of [...this.rooms.keys()]) this.destroy(id, '服务已停止'); }
+  dispose() {
+    this.disposed = true;
+    if (this.superRoomRetry) clearTimeout(this.superRoomRetry);
+    this.superRoomRetry = null;
+    for (const id of [...this.rooms.keys()]) this.destroy(id, '服务已停止', true);
+  }
 }
 
 export const roomManager = new RoomManager(undefined, undefined, undefined, { credentials: id => qqmusicBindings.credential(id),

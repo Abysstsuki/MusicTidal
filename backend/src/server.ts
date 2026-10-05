@@ -21,6 +21,7 @@ if (fs.existsSync(envOverridePath)) {
 const PORT = process.env.PORT || 3001;
 
 async function startServer() {
+  await roomManager.initializeSuperRoom();
   const server = http.createServer(app); // 使用 http server 包装 express
 
   // 启动 WebSocket 服务
