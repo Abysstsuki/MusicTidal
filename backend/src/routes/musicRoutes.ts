@@ -16,7 +16,8 @@ router.get('/song/search', async (req, res) => {
     const { limit } = pagination({ offset, limit: page.limit });
     const version = provider === 'netease' ? room.credentialVersion : room.qqmusicVersion;
     try {
-      const data = provider === 'netease' ? await searchSongByKeyword(keywords, offset, limit, room.catalogClient) : await room.catalogQqmusicClient.search(keywords, offset, limit);
+      // QQ search needs the room's bound credentials, including the super room's public account.
+      const data = provider === 'netease' ? await searchSongByKeyword(keywords, offset, limit, room.catalogClient) : await room.qqmusicClient.search(keywords, offset, limit);
       if (room.closed || version !== (provider === 'netease' ? room.credentialVersion : room.qqmusicVersion)) throw new HttpError(409, '音乐绑定已变化，请重新搜索');
       providers[provider] = { ...data, offset, limit, hasMore: offset + limit < data.total, error: null };
     } catch (error) { providers[provider] = { songs: [], total: null, offset, limit, hasMore: false,

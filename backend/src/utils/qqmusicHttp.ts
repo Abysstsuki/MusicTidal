@@ -17,6 +17,9 @@ export class QqMusicClient implements NeteaseClient {
       if (this.disposed) throw new HttpError(409, 'QQ 音乐绑定已变化', 'QQMUSIC_BINDING_CHANGED');
       return value;
     } catch (error) {
+      if ((error as any).code === 'SEARCH_REJECTED') {
+        throw new HttpError(502, this.cookie ? 'QQ 音乐搜索暂不可用，请稍后重试' : 'QQ 音乐匿名搜索暂不可用', 'QQMUSIC_SEARCH_UNAVAILABLE');
+      }
       if ([1000, 104400, 104401].includes(Number((error as any).code))) {
         this.onExpired?.(); throw new HttpError(409, 'QQ 音乐授权已过期，请重新绑定', 'QQMUSIC_BINDING_EXPIRED');
       }

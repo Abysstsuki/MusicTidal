@@ -42,21 +42,21 @@ test('super room REST/WS collaboration, personal library isolation and source-in
   }
   assert.equal((await call(root + '/queue/recommendations/stop', 2, 'POST')).data.recommendations.available, false);
 
-  // The public playback credential must never be used for search or lyrics, including legacy routes.
+  // QQ song search uses public credentials; Netease search, lyrics and personal libraries remain isolated.
   const anonymous = [], playback = [];
   room.anonymousClient = { get: async (path, config) => { anonymous.push('netease:' + path); return api.client.get(path, config); } };
   room.anonymousQqmusicClient = { ...api.qqClient, search: async (...args) => { anonymous.push('qqmusic:search'); return api.qqClient.search(...args); }, lyric: async (...args) => { anonymous.push('qqmusic:lyric'); return api.qqClient.lyric(...args); } };
   room.client = { get: async (path, config) => { playback.push('netease:' + path); assert.ok(['/song/detail', '/song/url/v1'].includes(path)); return api.client.get(path, config); } };
-  room.qqmusicClient = { ...api.qqClient, search: () => { throw new Error('Public search borrowed playback account'); }, lyric: () => { throw new Error('Public lyrics borrowed playback account'); },
+  room.qqmusicClient = { ...api.qqClient, search: async (...args) => { playback.push('qqmusic:search'); return api.qqClient.search(...args); }, lyric: () => { throw new Error('Public lyrics borrowed playback account'); },
     get: () => { throw new Error('Public library borrowed playback account'); } };
   assert.equal((await call(root + '/music/song/search?keywords=fixture')).status, 200);
   assert.equal((await call(root + '/netease/song/search?keywords=fixture')).status, 200);
   for (const provider of ['netease', 'qqmusic']) assert.equal((await call(root + '/music/lyric?id=10&provider=' + provider)).status, 200);
   assert.equal((await call(root + '/netease/lyric?id=10')).status, 200);
-  assert.ok(anonymous.includes('netease:/cloudsearch')); assert.ok(anonymous.includes('qqmusic:search')); assert.ok(anonymous.includes('qqmusic:lyric')); assert.deepEqual(playback, []);
+  assert.ok(anonymous.includes('netease:/cloudsearch')); assert.ok(!anonymous.includes('qqmusic:search')); assert.ok(anonymous.includes('qqmusic:lyric')); assert.deepEqual(playback, ['qqmusic:search']);
   room.anonymousClient = { get: async () => { throw new Error('anonymous upstream unavailable'); } };
   assert.equal((await call(root + '/music/song/search?keywords=failed')).data.providers.netease.songs.length, 0);
-  assert.deepEqual(playback, []);
+  assert.deepEqual(playback, ['qqmusic:search', 'qqmusic:search']);
 
   await api.bind(3); await api.bind(3, 'qqmusic');
   const readers = [];

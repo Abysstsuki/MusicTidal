@@ -2,6 +2,8 @@
 
 网易云和 QQ 音乐可同时绑定。点歌搜索、播放及推荐使用房主账号；个人歌单的读取和搜索使用当前用户账号。授权过期等同于未绑定。个人歌单可浏览，房主没有对应授权时禁止单曲和整单加入房间，后端返回 `MUSIC_BINDING_REQUIRED`（409），不会退出 MusicTidal 登录。
 
+超级房间的 QQ 点歌搜索使用公共 QQ 授权，所有成员均可搜索，无需个人绑定 QQ。网易云点歌搜索和两平台歌词使用匿名客户端；个人歌单仍使用当前用户自己的绑定。公共授权仅在后端使用，不返回账号身份、资料或凭据。
+
 ## API 与歌曲身份
 
 - `GET /api/rooms/:roomId/music/song/search?keywords=…&limit=10&neteaseOffset=0&qqmusicOffset=0`：独立分页并交错返回两家结果，网易云在前。`providers` 包含各家 `songs/total/offset/limit/hasMore/error`；某家失败不丢弃另一家。

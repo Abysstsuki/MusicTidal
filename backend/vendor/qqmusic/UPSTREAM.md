@@ -38,3 +38,8 @@ ticket. Native OAuth reads the graph-scoped ticket and only music-domain cookies
 become the encrypted music credential. QQ requests use the login-page Referer;
 polling sends only that session's qrsig. The callback address remains validated
 and is used as returned by Tencent.
+
+Search rejection handling (2026-10-05): check inner search codes and negative
+`meta.is_filter` statuses even when the RPC reports code zero. Rejected searches
+raise a search failure instead of being cached as successful empty results;
+they do not invalidate an otherwise valid music binding.

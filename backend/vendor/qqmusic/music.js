@@ -1,8 +1,15 @@
 'use strict';
 const { rpc, request, cookies, hash } = require('./request');
-const search = (cookie, keyword, offset, limit, type = 0, signal) => rpc(cookie,
-  'music.search.SearchCgiService', 'DoSearchForQQMusicDesktop',
-  { query: keyword, search_type: type, page_num: Math.floor(offset / limit) + 1, num_per_page: limit }, { signal });
+async function search(cookie, keyword, offset, limit, type = 0, signal) {
+  const data = await rpc(cookie, 'music.search.SearchCgiService', 'DoSearchForQQMusicDesktop',
+    { query: keyword, search_type: type, page_num: Math.floor(offset / limit) + 1, num_per_page: limit }, { signal });
+  const code = Number(data?.code || data?.meta?.ret || 0);
+  // QQ can reject anonymous searches with a negative filter status while both RPC codes stay zero.
+  if (!data || code !== 0 || Number(data.meta?.is_filter) < 0) {
+    const error = new Error('QQ 音乐搜索暂时不可用'); error.code = code || 'SEARCH_REJECTED'; throw error;
+  }
+  return data;
+}
 const details = (cookie, ids, signal) => rpc(cookie, 'music.trackInfo.UniformRuleCtrl', 'CgiGetTrackInfo',
   { ids, types: ids.map(() => 0), modify_stamp: ids.map(() => 0), ctx: 0, client: 1 }, { signal });
 async function urls(cookie, track, trial = false, signal) {
