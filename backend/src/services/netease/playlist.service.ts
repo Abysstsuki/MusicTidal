@@ -27,19 +27,40 @@ export class PlaylistCatalog {
   private cache = new Map<string, { userId: number; expires: number; value: unknown }>();
   private versions = new Map<number, number>();
   private clients = new Map<number, Set<NeteaseClient>>();
+  private credentialCache = new Map<number, { expires: number; value: Credential }>();
+  private credentialTasks = new Map<number, Promise<Credential>>();
+  private pending = new Map<string, Promise<unknown>>();
   constructor(private readonly credentials: (id: number) => Promise<Credential> = id => neteaseBindings.credential(id),
     private readonly clientFactory: (cookie: string) => NeteaseClient = createNeteaseClient,
     private readonly invalidate: (id: number, encrypted: string) => Promise<void> = (id, encrypted) => neteaseBindings.markInvalid(id, encrypted),
     private readonly provider: MusicProvider = 'netease') {}
   invalidateUser(userId: number) {
     this.versions.set(userId, (this.versions.get(userId) || 0) + 1);
+    this.credentialCache.delete(userId); this.credentialTasks.delete(userId);
+    for (const key of this.pending.keys()) if (key.startsWith(userId + ':')) this.pending.delete(key);
     for (const client of this.clients.get(userId) || []) client.dispose?.(true);
     this.clients.delete(userId);
     for (const [key, item] of this.cache) if (item.userId === userId) this.cache.delete(key);
   }
+  private async credentialFor(userId: number): Promise<Credential> {
+    const saved = this.credentialCache.get(userId);
+    if (saved && saved.expires > Date.now()) return saved.value;
+    const running = this.credentialTasks.get(userId);
+    if (running) return running;
+    const version = this.versions.get(userId) || 0;
+    const task = this.credentials(userId).then(value => {
+      if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, '音乐绑定已变化，请重试', `${this.provider.toUpperCase()}_BINDING_CHANGED`);
+      if (this.credentialCache.size >= 100) this.credentialCache.delete(this.credentialCache.keys().next().value!);
+      this.credentialCache.set(userId, { expires: Date.now() + 15000, value });
+      return value;
+    });
+    this.credentialTasks.set(userId, task);
+    try { return await task; }
+    finally { if (this.credentialTasks.get(userId) === task) this.credentialTasks.delete(userId); }
+  }
   private async context(userId: number) {
     const version = this.versions.get(userId) || 0;
-    const credential = await this.credentials(userId);
+    const credential = await this.credentialFor(userId);
     if (credential.binding.status !== 'bound') throw new HttpError(409, `请先绑定有效的${providerName(this.provider)}账号`, `${this.provider.toUpperCase()}_BINDING_REQUIRED`);
     if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重新打开歌单`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
     const identity = createHash('sha256').update(credential.cookie).digest('hex');
@@ -67,11 +88,17 @@ export class PlaylistCatalog {
         const found = this.cache.get(cacheKey);
         if (found && found.expires > Date.now()) return found.value as T;
         this.cache.delete(cacheKey);
-        const value = await load();
-        if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重试`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
-        if (this.cache.size >= 100) this.cache.delete(this.cache.keys().next().value!);
-        this.cache.set(cacheKey, { userId, expires: Date.now() + 120000, value });
-        return value;
+        const running = this.pending.get(cacheKey);
+        if (running) return await running as T;
+        const task = load().then(value => {
+          if ((this.versions.get(userId) || 0) !== version) throw new HttpError(409, `音乐绑定已变化，请重试`, `${this.provider.toUpperCase()}_BINDING_CHANGED`);
+          if (this.cache.size >= 100) this.cache.delete(this.cache.keys().next().value!);
+          this.cache.set(cacheKey, { userId, expires: Date.now() + 120000, value });
+          return value;
+        });
+        this.pending.set(cacheKey, task);
+        try { return await task; }
+        finally { if (this.pending.get(cacheKey) === task) this.pending.delete(cacheKey); }
       } finally { clients.delete(client); if (!clients.size && this.clients.get(userId) === clients) this.clients.delete(userId); client.dispose?.(); }
     };
     return { credential, get, cached };
@@ -120,7 +147,25 @@ export class PlaylistCatalog {
       return ids.flatMap(id => songs.has(id) ? [songs.get(id)!] : []);
     });
   }
+  async assertAccess(userId: number, playlistId: number): Promise<void> {
+    if (this.provider !== 'qqmusic') { await this.index(userId, playlistId); return; }
+    const ctx = await this.context(userId);
+    await ctx.cached(`access:${playlistId}`, async () => {
+      // Recheck permission without re-reading a complete imported QQ playlist index.
+      await ctx.get('/playlist/tracks', { id: playlistId, offset: 0, limit: 1 });
+      return true;
+    });
+  }
   async tracks(userId: number, playlistId: number, page: { offset: number; limit: number }) {
+    if (this.provider === 'qqmusic') {
+      const ctx = await this.context(userId);
+      return ctx.cached(`tracks:${playlistId}:${page.offset}:${page.limit}`, async () => {
+        const data = await ctx.get('/playlist/tracks', { id: playlistId, ...page });
+        if (!data.playlist || !Array.isArray(data.songs)) throw new HttpError(502, '歌单歌曲暂不可用');
+        return { playlist: summary(data.playlist, ctx.credential.binding.profile?.uid), items: data.songs as Song[],
+          ...page, total: Number(data.total) || 0, hasMore: data.more === true };
+      });
+    }
     const index = await this.index(userId, playlistId);
     return { playlist: index.playlist, items: await this.songs(userId, index.trackIds.slice(page.offset, page.offset + page.limit)),
       ...page, total: index.trackIds.length, hasMore: page.offset + page.limit < index.trackIds.length };

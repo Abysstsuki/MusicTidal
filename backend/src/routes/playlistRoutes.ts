@@ -34,7 +34,7 @@ roomPlaylistRoutes.get('/:entryId/tracks', async (req: AuthRequest, res) => {
   const room = member(req), entry = room.queue.playlists.get(String(req.params.entryId)), page = pagination(req.query);
   const catalog = catalogFor(entry.index.playlist.provider);
   const readerId = room.kind === 'super' ? req.user!.userId : entry.addedBy.id;
-  await catalog.index(readerId, entry.index.playlist.id);
+  await catalog.assertAccess(readerId, entry.index.playlist.id);
   const items = await catalog.songs(readerId, entry.index.trackIds.slice(page.offset, page.offset + page.limit));
   member(req).queue.playlists.get(entry.entryId);
   res.json({ playlist: entry.index.playlist, items, ...page, total: entry.index.trackIds.length, hasMore: page.offset + page.limit < entry.index.trackIds.length });
@@ -42,7 +42,7 @@ roomPlaylistRoutes.get('/:entryId/tracks', async (req: AuthRequest, res) => {
 roomPlaylistRoutes.post('/:entryId/activate', async (req: AuthRequest, res) => {
   const room = controller(req), entry = room.queue.playlists.get(String(req.params.entryId));
   const provider = musicProvider(entry.index.playlist.provider); room.requireProvider(provider);
-  if (room.kind !== 'super') await catalogFor(provider).index(entry.addedBy.id, entry.index.playlist.id);
+  if (room.kind !== 'super') await catalogFor(provider).assertAccess(entry.addedBy.id, entry.index.playlist.id);
   controller(req).requireProvider(provider); room.queue.activatePlaylist(entry.entryId); res.json(room.queue.getPlaylistState());
 });
 roomPlaylistRoutes.patch('/:entryId/settings', (req: AuthRequest, res) => {

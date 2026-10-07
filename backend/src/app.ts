@@ -9,7 +9,7 @@ import { prisma } from './utils/prisma';
 const app = express();
 
 // 通用中间件
-app.use(cors());
+app.use(cors({ maxAge: 600 }));
 app.use(express.json());
 app.use(morgan('dev'));
 

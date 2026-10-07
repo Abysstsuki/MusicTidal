@@ -152,7 +152,7 @@ export class SongQueueService {
     }
   }
 
-  async startHeartMode(provider: MusicProvider = 'netease'): Promise<RecommendationState> {
+  async startHeartMode(provider: MusicProvider = 'netease', waitForInitialFill = true): Promise<RecommendationState> {
     if (this.disposed) return this.getRecommendationState();
     if (this.dependencies.recommendationsDisabledReason) throw new HttpError(403, this.dependencies.recommendationsDisabledReason, 'RECOMMENDATIONS_DISABLED');
     if (this.recommendationsEnabled && this.recommendationProvider !== provider) this.stopRecommendations();
@@ -166,7 +166,9 @@ export class SongQueueService {
       this.heartModeSession = this.dependencies.createRecommendationSession?.(provider, initial) || this.dependencies.createHeartSession(initial);
       this.broadcastRecommendationState();
     }
-    await this.refillRecommendations();
+    const fill = this.refillRecommendations();
+    if (waitForInitialFill) await fill;
+    else void fill.catch(() => {});
     return this.getRecommendationState();
   }
 

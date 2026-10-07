@@ -9,7 +9,9 @@ const router = Router();
 router.get('/song/search', async (req, res) => {
   const room = res.locals.room as Room, keywords = String(req.query.keywords || '').trim();
   if (!keywords || keywords.length > 100) throw new HttpError(400, '请输入 1–100 字的关键词');
-  const page = pagination(req.query), enabled = room.info().enabledProviders;
+  const selected = req.query.provider === undefined ? null : musicProvider(req.query.provider);
+  if (selected) room.requireProvider(selected);
+  const page = pagination(req.query), enabled = room.info().enabledProviders.filter(provider => !selected || provider === selected);
   const providers: Partial<Record<MusicProvider, any>> = {};
   await Promise.all(enabled.map(async provider => {
     const offset = req.query[provider + 'Offset'] === undefined ? page.offset : Number(req.query[provider + 'Offset']);

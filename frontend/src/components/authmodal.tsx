@@ -9,10 +9,11 @@ import { apiRequest } from '@/lib/api';
 import { authErrorMessage, validateAuthInput } from '@/lib/auth-errors';
 import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import StageDialog from './StageDialog';
+import type { AuthUser } from '@/contexts/AuthContext';
 
 interface AuthModalProps {
   onClose: () => void;
-  onLoginSuccess?: (username: string, token: string) => void;
+  onLoginSuccess?: (username: string, token: string, profile: AuthUser) => void;
 }
 export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
   const { showToast } = useToast();
@@ -43,13 +44,13 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
     setError(''); setNotice(''); setBusy(true);
     try {
       const payload = isRegister ? { username: username.trim(), email: email.trim(), password } : { email: email.trim(), password };
-      const data = await apiRequest<{ token?: string; user?: { username: string } }>('/api/auth/' + (isRegister ? 'register' : 'login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
+      const data = await apiRequest<{ token?: string; user?: AuthUser }>('/api/auth/' + (isRegister ? 'register' : 'login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
       if (controller.signal.aborted) return;
       if (isRegister) { setIsRegister(false); setNotice('注册成功，登录后就能和大家聊天'); setPassword(''); setShowPassword(false); }
       else {
-        if (!data.token || !data.user?.username) throw new Error('登录未完成，请重试');
+        if (!data.token || !data.user?.username || !Number.isSafeInteger(data.user.id)) throw new Error('登录未完成，请重试');
         showToast('登录成功', { tone: 'success' });
-        onLoginSuccess?.(data.user.username, data.token); onClose();
+        onLoginSuccess?.(data.user.username, data.token, data.user); onClose();
       }
     } catch (err) { if (!controller.signal.aborted) setError(authErrorMessage(err, isRegister)); }
     finally {

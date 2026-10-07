@@ -15,13 +15,13 @@ router.post('/', async (req: AuthRequest, res) => {
   const user = await getUserById(req.user!.userId);
   if (!user) throw new HttpError(401, '请重新登录');
   const room = await roomManager.create(user, req.body?.name, req.body?.password);
-  res.status(201).json({ room: room.summary() });
+  res.status(201).json({ room: room.summary(), state: room.state() });
 });
 router.post('/:roomId/join', async (req: AuthRequest, res) => {
   const user = await getUserById(req.user!.userId);
   if (!user) throw new HttpError(401, '请重新登录');
   const room = await roomManager.join(String(req.params.roomId), user, req.body?.password, req.body?.inviteToken);
-  res.json({ room: room.summary() });
+  res.json({ room: room.summary(), state: room.state() });
 });
 router.post('/:roomId/leave', (req: AuthRequest, res) => { roomManager.leave(String(req.params.roomId), req.user!.userId); res.json({ success: true }); });
 router.use('/:roomId', (req: AuthRequest, res, next) => {

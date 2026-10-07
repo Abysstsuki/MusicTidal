@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import HeadphonesRounded from '@mui/icons-material/HeadphonesRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
@@ -8,7 +9,8 @@ import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import { apiRequest, ApiError } from '@/lib/api';
-import type { RoomSummary } from '@/types/room';
+import type { RoomState, RoomSummary } from '@/types/room';
+import { cachedLobby, cacheLobby, prepareRoomEntry } from '@/lib/room-entry';
 import UserInfo from '@/components/userinfo';
 import AuthModal from '@/components/authmodal';
 import NeteaseBinding from '@/components/NeteaseBinding';
@@ -17,7 +19,9 @@ import RoomLobbyCard from '@/components/RoomLobbyCard';
 import RoomActionDialog, { type RoomAction } from '@/components/RoomActionDialog';
 
 export default function Home() {
+  const router = useRouter();
   const auth = useAuth();
+  const userId = auth.user?.id;
   const { showToast } = useToast();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,30 +40,34 @@ export default function Home() {
   useToastMessage(needsRoomDialog ? '' : error, { id: 'lobby-join-error', tone: 'error' });
   const sequence = useRef(0);
   const authCompleted = useRef(false);
+  const entering = useRef(false);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const version = ++sequence.current;
     try {
       const data = await apiRequest<{ rooms: RoomSummary[] }>('/api/rooms', { signal });
-      if (!signal?.aborted && version === sequence.current) { setRooms(data.rooms); setLoadError(''); }
+      if (!signal?.aborted && version === sequence.current) { setRooms(data.rooms); cacheLobby(data.rooms); setLoadError(''); }
     } catch (problem) { if (!signal?.aborted && version === sequence.current) setLoadError((problem as Error).message); }
     finally { if (!signal?.aborted && version === sequence.current) setLoading(false); }
   }, []);
   useEffect(() => {
     const controller = new AbortController();
+    const saved = cachedLobby();
+    if (saved) { setRooms(saved); setLoading(false); }
+    router.prefetch('/room');
     const notice = sessionStorage.getItem('room-notice');
     if (notice) showToast(notice, { id: 'room-exit', tone: 'info', duration: 5000 });
     sessionStorage.removeItem('room-notice');
     void refresh(controller.signal);
     const interval = setInterval(() => void refresh(controller.signal), 10000);
     return () => { controller.abort(); clearInterval(interval); };
-  }, [refresh, showToast]);
+  }, [refresh, showToast, router]);
   useEffect(() => {
     setActive(null);
-    if (!auth.user) return;
+    if (!userId) return;
     const controller = new AbortController();
     apiRequest<{ room: RoomSummary | null }>('/api/user/active-room', { signal: controller.signal }).then(data => { if (!controller.signal.aborted) setActive(data.room); }).catch(() => {});
     return () => controller.abort();
-  }, [auth.user]);
+  }, [userId]);
   const open = (next: RoomAction) => {
     setAction(next); setError(''); setPassword(''); setName('');
     if (!auth.user) { authCompleted.current = false; setShowAuth(true); }
@@ -71,12 +79,17 @@ export default function Home() {
     setError((problem as Error).message);
   };
   const enter = async (room: RoomSummary) => {
+    if (entering.current) return;
+    entering.current = true;
     setBusy(true); setError('');
+    let navigating = false;
     try {
-      await apiRequest('/api/rooms/' + room.id + '/join', { method: 'POST', body: JSON.stringify({ password }) });
-      window.location.assign('/room?roomId=' + room.id);
+      const data = await apiRequest<{ state?: RoomState }>('/api/rooms/' + room.id + '/join', { method: 'POST', body: JSON.stringify({ password }) });
+      const state = data.state || await apiRequest<RoomState>('/api/rooms/' + room.id + '/state');
+      prepareRoomEntry(state, auth.token);
+      navigating = true; router.push('/room?roomId=' + room.id);
     } catch (problem) { await handleProblem(problem); }
-    finally { setBusy(false); }
+    finally { if (!navigating) { entering.current = false; setBusy(false); } }
   };
   useEffect(() => {
     if (auth.user && action?.kind === 'join' && !action.room.locked && (!active || active.id === action.room.id)) void enter(action.room);
@@ -84,12 +97,17 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.user?.id, action]);
   const create = async (event: FormEvent) => {
+    if (entering.current) { event.preventDefault(); return; }
+    entering.current = true;
     event.preventDefault(); setBusy(true); setError('');
+    let navigating = false;
     try {
-      const data = await apiRequest<{ room: RoomSummary }>('/api/rooms', { method: 'POST', body: JSON.stringify({ name: name.trim(), password: password || undefined }) });
-      window.location.assign('/room?roomId=' + data.room.id);
+      const data = await apiRequest<{ room: RoomSummary; state?: RoomState }>('/api/rooms', { method: 'POST', body: JSON.stringify({ name: name.trim(), password: password || undefined }) });
+      const state = data.state || await apiRequest<RoomState>('/api/rooms/' + data.room.id + '/state');
+      prepareRoomEntry(state, auth.token);
+      navigating = true; router.push('/room?roomId=' + data.room.id);
     } catch (problem) { await handleProblem(problem); }
-    finally { setBusy(false); }
+    finally { if (!navigating) { entering.current = false; setBusy(false); } }
   };
   const visible = [...rooms.filter(room => room.kind === 'super'), ...rooms.filter(room => room.kind !== 'super' && (room.name + (room.host?.username || '')).toLowerCase().includes(filter.toLowerCase()))];
   return <main className="room-lobby">
@@ -100,7 +118,7 @@ export default function Home() {
     <section className="lobby-rooms" aria-label="房间列表"><div className="lobby-list-heading"><h2>房间 <span>{rooms.length}</span></h2><div><input aria-label="搜索房间" placeholder="搜索房间或房主" value={filter} onChange={event => setFilter(event.target.value)} /><button className="icon-button" aria-label="刷新房间列表" onClick={() => void refresh()}><RefreshRounded /></button></div></div>
       {loading ? <div className="lobby-empty" role="status">正在寻找房间…</div> : !visible.length ? <div className="lobby-empty"><HeadphonesRounded /><h2>{filter ? '没有找到这个房间' : '还没有人开房间'}</h2><p>{filter ? '试试其他房间名或房主昵称。' : '创建一个房间，邀请朋友加入。'}</p></div> : <div className="room-grid">{visible.map(room => <RoomLobbyCard key={room.id} room={room} current={active?.id === room.id} disabled={busy || auth.loading} joining={busy && action?.kind === 'join' && action.room.id === room.id} onEnter={() => open({ kind: 'join', room })} />)}</div>}
     </section><footer className="lobby-footer">房间内共享队列与聊天 · 登录后加入</footer>
-    {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token) => { authCompleted.current = true; auth.login(username, token); setShowAuth(false); }} />}
+    {showAuth && <AuthModal onClose={() => { setShowAuth(false); if (!authCompleted.current) setAction(null); }} onLoginSuccess={(username, token, profile) => { authCompleted.current = true; auth.login(username, token, profile); setShowAuth(false); }} />}
     {showBinding && <NeteaseBinding onClose={() => setShowBinding(false)} />}
     {action && needsRoomDialog && auth.user && !auth.loading && <RoomActionDialog action={action} active={active} name={name} password={password} busy={busy} error={error}
       onNameChange={setName} onPasswordChange={setPassword} onClose={() => { setAction(null); setPassword(''); }} onCreate={event => void create(event)}

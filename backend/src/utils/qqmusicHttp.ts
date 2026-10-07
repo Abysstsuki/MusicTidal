@@ -122,18 +122,39 @@ export class QqMusicClient implements NeteaseClient {
       const items = data.body?.songlist?.list || data.body?.songlist?.listlist || data.songlist?.list || [];
       return { data: { code: 200, result: { playlists: items.map(map), playlistCount: Number(data.meta?.sum || data.body?.songlist?.sum) || items.length } } };
     }
-    if (endpoint === '/playlist/detail') {
-      const tracks: any[] = []; let first: any;
-      for (let offset = 0; offset < 50000; offset += 100) {
-        const data: any = await this.call(signal => api.playlist(this.cookie, p.id, offset, 100, signal));
-        first ||= data; const batch = data.songlist || [];
-        tracks.push(...batch); this.remember(batch);
-        if (!batch.length || (!data.hasmore && tracks.length >= Number(data.total_song_num || data.songnum || tracks.length))) break;
-        if (offset === 49900) throw new HttpError(502, 'QQ 歌单歌曲数量超过读取上限');
+    if (endpoint === '/playlist/detail' || endpoint === '/playlist/tracks') {
+      const pageOnly = endpoint === '/playlist/tracks', offset = pageOnly ? Number(p.offset || 0) : 0, limit = pageOnly ? Number(p.limit || 30) : 100;
+      const first: any = await this.call(signal => api.playlist(this.cookie, p.id, offset, limit, signal));
+      if (!Array.isArray(first.songlist)) throw new HttpError(502, 'QQ 歌单歌曲暂不可用');
+      const total = Number(first.total_song_num || first.songnum || first.dirinfo?.songnum || first.dissinfo?.songnum || 0);
+      const playlist = { ...map(first.dirinfo || first.dissinfo || {}), id: p.id, trackCount: total,
+        ...(p.id === 201 ? { name: '我喜欢', specialType: 5, userId: api.cookies(this.cookie).qqmusic_uin || api.cookies(this.cookie).uin } : {}) };
+      const initial = first.songlist || []; this.remember(initial);
+      if (pageOnly) return { data: { code: 200, playlist, songs: initial.map(qqSong), total: total || offset + initial.length,
+        more: Boolean(first.hasmore) || offset + initial.length < total } };
+      if (total > 50000) throw new HttpError(502, 'QQ 歌单歌曲数量超过读取上限');
+      const batches = new Map<number, any[]>([[0, initial]]);
+      if (total > 100 && initial.length) {
+        // Full indexes are needed for shared shuffle/repeat; load at most three pages concurrently.
+        let next = 100;
+        await Promise.all(Array.from({ length: 3 }, async () => {
+          while (next < total) {
+            const begin = next; next += 100;
+            const data: any = await this.call(signal => api.playlist(this.cookie, p.id, begin, 100, signal));
+            batches.set(begin, data.songlist || []); this.remember(data.songlist || []);
+          }
+        }));
+      } else if (first.hasmore && initial.length) {
+        // Keep compatibility with responses that do not report a total.
+        for (let begin = 100; begin < 50000; begin += 100) {
+          const data: any = await this.call(signal => api.playlist(this.cookie, p.id, begin, 100, signal));
+          const batch = data.songlist || []; batches.set(begin, batch); this.remember(batch);
+          if (!batch.length || !data.hasmore) break;
+          if (begin === 49900) throw new HttpError(502, 'QQ 歌单歌曲数量超过读取上限');
+        }
       }
-      return { data: { code: 200, playlist: { ...map(first.dirinfo || first.dissinfo || {}), id: p.id,
-        ...(p.id === 201 ? { name: '我喜欢', specialType: 5, userId: api.cookies(this.cookie).qqmusic_uin || api.cookies(this.cookie).uin } : {}),
-        trackIds: tracks.map(raw => ({ id: Number(raw.id || raw.songid) })) } } };
+      const tracks = [...batches].sort(([left], [right]) => left - right).flatMap(([,batch]) => batch);
+      return { data: { code: 200, playlist: { ...playlist, trackIds: tracks.map(raw => ({ id: Number(raw.id || raw.songid) })) } } };
     }
     throw new HttpError(404, 'QQ 音乐接口不存在');
   }

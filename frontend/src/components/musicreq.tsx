@@ -17,6 +17,7 @@ import BatchSongActions, { BatchSongCheckbox } from './BatchSongActions';
 import batchStyles from './batch-song.module.css';
 
 const PAGE_SIZE = 10;
+type SearchResult = { songs: Song[]; providers: Record<string, { error: string | null; total: number | null }> };
 
 export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const { enqueue, requestRoom, room } = useMusicContext();
@@ -36,6 +37,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
   const [added, setAdded] = useState<string | null>(null);
   const batch = useBatchSongSelection({ songs, page, contextKey: query, visible: isVisible, disabled: pending !== null, preserveModeOnContextChange: true });
   const requestRef = useRef<AbortController | null>(null);
+  const results = useRef(new Map<string, { expires: number; data: SearchResult }>());
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (isVisible) inputRef.current?.focus(); }, [isVisible]);
   useEffect(() => () => requestRef.current?.abort(), []);
@@ -46,11 +48,35 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true); setError(''); setKeyword(term); setPage(nextPage);
+    const cacheKey = JSON.stringify([scope, term, nextPage]);
+    const publish = (data: SearchResult) => {
+      if (controller.signal.aborted) return;
+      setSongs(data.songs); setPages(Math.max(1, ...Object.values(data.providers).map(result => Math.ceil((result.total || 0) / PAGE_SIZE))));
+      setError(Object.entries(data.providers).filter(([,result]) => result.error).map(([provider,result]) => providerName(provider as MusicProvider) + '：' + result.error).join('；'));
+    };
     try {
-      const data = await requestRoom<{ songs: Song[]; providers: Record<string, { error: string | null; total: number | null }> }>('/music/song/search?keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setSongs(data.songs); setPages(Math.max(1, ...Object.values(data.providers).map(result => Math.ceil((result.total || 0) / PAGE_SIZE))));
-        setError(Object.entries(data.providers).filter(([,result]) => result.error).map(([provider,result]) => providerName(provider as MusicProvider) + '：' + result.error).join('；'));
+      const saved = results.current.get(cacheKey);
+      if (saved && saved.expires > Date.now()) { publish(saved.data); return; }
+      setSongs([]);
+      const byProvider = new Map<MusicProvider, Song[]>();
+      const data: SearchResult = { songs: [], providers: {} };
+      const combine = () => {
+        // Append later results so rows already visible do not move under a click.
+        data.songs = [...byProvider.values()].flat();
+        publish(data);
+      };
+      // Each platform can paint its results as soon as it finishes.
+      await Promise.all(providers.map(async provider => {
+        try {
+          const response = await requestRoom<SearchResult>('/music/song/search?provider=' + provider + '&keywords=' + encodeURIComponent(term) + '&offset=' + (nextPage - 1) * PAGE_SIZE + '&limit=' + PAGE_SIZE, { signal: controller.signal });
+          byProvider.set(provider, response.songs.filter(song => (song.provider || 'netease') === provider));
+          data.providers[provider] = response.providers[provider] || { error: null, total: 0 };
+        } catch (err) { data.providers[provider] = { error: (err as Error).message, total: null }; }
+        combine();
+      }));
+      if (!controller.signal.aborted && Object.values(data.providers).every(result => !result.error)) {
+        if (results.current.size >= 20) results.current.delete(results.current.keys().next().value!);
+        results.current.set(cacheKey, { data, expires: Date.now() + 60000 });
       }
     } catch (err) {
       if (!controller.signal.aborted) { setError((err as Error).message); setSongs([]); }
@@ -76,7 +102,7 @@ export default function MusicReq({ isVisible }: { isVisible: boolean }) {
     </form>
     {batch.active && <p className={batchStyles.searchHint}>{providers.length ? '翻页保留选择 · 更换关键词清空已选 · ' + providers.map(providerName).join(' + ') : unavailableReason + '，已选歌曲暂不可入队'}</p>}
     <div className="song-list" aria-busy={loading}>
-      {loading ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '搜索歌曲'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map((song, index) => <div className={'song-row' + (batch.active ? ' ' + batchStyles.selectableRow : '') + (batch.selected.has(songKey(song)) ? ' ' + batchStyles.selectedRow : '')} key={songKey(song)}
+      {loading && !songs.length ? <div className="panel-empty"><p>正在寻找你的下一首歌…</p></div> : !songs.length ? <div className="panel-empty"><SearchRounded /><p>{keyword ? (error ? '音乐服务暂时没有回应' : '没有找到这首歌') : '搜索歌曲'}</p><span>{keyword ? '换个关键词，或稍后再试' : '输入歌名或歌手，按回车搜索'}</span></div> : songs.map((song, index) => <div className={'song-row' + (batch.active ? ' ' + batchStyles.selectableRow : '') + (batch.selected.has(songKey(song)) ? ' ' + batchStyles.selectedRow : '')} key={songKey(song)}
         onClick={event => { if (batch.active && !(event.target as Element).closest('button, input, a, label')) batch.toggle(song, index); }}>
         {batch.active && <BatchSongCheckbox batch={batch} song={song} index={index} />}
         <SongCover src={song.prcUrl} /><div className="song-row-info"><div className="song-title"><strong title={song.name}>{song.name}</strong><SongBadges song={song} /></div><span>{song.artist} · {formatDuration(song.duration)}</span></div>

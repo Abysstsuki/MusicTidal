@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
+import { useRouter } from 'next/navigation';
 import { quietRhythm, type RhythmReader } from '@/lib/audio-rhythm';
 import type { ChatMessage, PlaybackSnapshot, QueueSong, RecommendationState, Song, SongReference, BatchQueueResult } from '@/types/music';
 import { providerName } from '@/types/music';
@@ -9,11 +10,12 @@ import { apiRequest, ApiError, BACKEND_URL } from '@/lib/api';
 import { useAuth } from './AuthContext';
 import { useToast, useToastMessage } from './ToastContext';
 import { emptyPlaylists, type PlaylistState, type PlaybackMode } from '@/types/playlist';
+import { clearRoomEntry } from '@/lib/room-entry';
 
 type Connection = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 interface MusicContextType {
   audioRef: RefObject<HTMLAudioElement | null>; rhythmReader: RefObject<RhythmReader>;
-  currentSong: Song | null; currentPosition: number; isPlaying: boolean; audioUrl: string; startTime: number;
+  currentSong: Song | null; isPlaying: boolean; audioUrl: string; startTime: number;
   playbackRevision: number; connection: Connection; queue: QueueSong[]; recommendations: RecommendationState;
   messages: ChatMessage[]; onlineUsers: string[]; user: { id?: number; username: string } | null;
   room: RoomInfo | null; isHost: boolean; canControlPlayback: boolean;
@@ -29,6 +31,21 @@ interface MusicContextType {
   requestRoom: <T>(path: string, options?: RequestInit) => Promise<T>;
 }
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
+function createProgressStore(initialPosition: number) {
+  let position = initialPosition;
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => position,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    set: (next: number) => { if (position !== next) { position = next; listeners.forEach(listener => listener()); } },
+  };
+}
+const ProgressContext = createContext<ReturnType<typeof createProgressStore> | null>(null);
+export function usePlaybackPosition() {
+  const store = useContext(ProgressContext);
+  if (!store) throw new Error('MusicProvider is required');
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
 const idleRecommendations: RecommendationState = { available: true, disabledReason: null, enabled: false, loading: false, phase: null, queued: 0, error: null };
 function normalizeAudioUrl(url: string): string {
   if (!url) return '';
@@ -49,6 +66,7 @@ export function useMusicContext() {
 }
 
 export function MusicProvider({ children, initialState }: { children: ReactNode; initialState: RoomState }) {
+  const router = useRouter();
   const auth = useAuth();
   const { showToast } = useToast();
   const roomId = initialState?.room.id || '';
@@ -57,7 +75,9 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const rhythmReader = useRef<RhythmReader>(quietRhythm);
   const [room, setRoom] = useState<RoomInfo | null>(initialState?.room || null);
   const [currentSong, setCurrentSong] = useState<Song | null>(initialState.playback.song || null);
-  const [currentPosition, setCurrentPosition] = useState(0);
+  // Audio progress only notifies the player and lyrics, not every room panel.
+  const [progress] = useState(() => createProgressStore(initialState.playback.song ? Math.max(0, Math.min(Date.now() - initialState.playback.startTime, initialState.playback.song.duration)) : 0));
+  const setCurrentPosition = progress.set;
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState(normalizeAudioUrl(initialState?.playback.url || ''));
   const [startTime, setStartTime] = useState(initialState?.playback.startTime || 0);
@@ -80,6 +100,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
   const socketRef = useRef<WebSocket | null>(null);
   const revision = useRef(initialState?.revision || 0);
   const serverPlaybackRevision = useRef(initialState?.playback.playbackRevision || 0);
+  const lastPlayback = useRef(initialState.playback);
   const lifetime = useRef(new AbortController());
   const closed = useRef(false);
 
@@ -89,8 +110,8 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
     sessionStorage.setItem('room-notice', reason);
-    window.location.assign('/');
-  }, []);
+    clearRoomEntry(); router.replace('/');
+  }, [router]);
   const requestRoom = useCallback(async <T,>(path: string, options?: RequestInit): Promise<T> => {
     const signal = options?.signal ? AbortSignal.any([lifetime.current.signal, options.signal]) : lifetime.current.signal;
     try { return await apiRequest<T>('/api/rooms/' + encodeURIComponent(roomId) + path, { ...options, signal }); }
@@ -100,12 +121,15 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     }
   }, [roomId, exit]);
   const applyPlayback = useCallback((snapshot: PlaybackSnapshot) => {
+    const previous = lastPlayback.current;
+    if (previous.playbackRevision === snapshot.playbackRevision && previous.song?.id === snapshot.song?.id && previous.song?.provider === snapshot.song?.provider && previous.url === snapshot.url && previous.startTime === snapshot.startTime) return;
+    lastPlayback.current = snapshot;
     setCurrentSong(snapshot.song); setAudioUrl(normalizeAudioUrl(snapshot.url || '')); setStartTime(snapshot.startTime || 0);
     setCurrentPosition(snapshot.song ? Math.max(0, Math.min(Date.now() - snapshot.startTime, snapshot.song.duration)) : 0);
     if (!snapshot.song) setIsPlaying(false);
     serverPlaybackRevision.current = snapshot.playbackRevision || 0;
     setPlaybackRevision(value => value + 1);
-  }, []);
+  }, [setCurrentPosition]);
   const applyState = useCallback((state: RoomState) => {
     if (closed.current || lifetime.current.signal.aborted || state.room.id !== roomId || state.revision < revision.current) return;
     revision.current = state.revision;
@@ -148,7 +172,7 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
           if (data.roomId !== roomId) return;
           if (data.type === 'ROOM_CLOSED') { exit(data.payload.reason); return; }
           if (data.revision < revision.current) return;
-          if (data.type === 'ROOM_SNAPSHOT') { applyState(data.payload); retry = 0; setConnection('connected'); return; }
+          if (data.type === 'ROOM_SNAPSHOT') { clearRoomEntry(); applyState(data.payload); retry = 0; setConnection('connected'); return; }
           revision.current = data.revision;
           if (data.type === 'PLAY_SONG') applyPlayback(data.payload);
           else if (data.type === 'QUEUE_UPDATED') setQueue(data.payload);
@@ -171,41 +195,45 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
     connect();
     return () => { cancelled = true; clearTimeout(timer); socketRef.current = null; socket?.close(); };
   }, [auth.token, roomId, exit, applyState, applyPlayback, showToast]);
-  const mutateQueue = async (action: string, body: object = {}) => {
-    await requestRoom('/queue/' + action, { method: 'POST', body: JSON.stringify(body) }); await syncPlayback();
-  };
-  const enqueue = async (song: Song) => {
+  const refreshIfDisconnected = useCallback(() => {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) void syncPlayback().catch(() => {});
+  }, [syncPlayback]);
+  const mutateQueue = useCallback(async (action: string, body: object = {}) => {
+    await requestRoom('/queue/' + action, { method: 'POST', body: JSON.stringify(body) });
+    refreshIfDisconnected();
+  }, [requestRoom, refreshIfDisconnected]);
+  const enqueue = useCallback(async (song: Song) => {
     await mutateQueue('add', { song });
-  };
-  const enqueueBatch = async (songs: SongReference[]) => {
+  }, [mutateQueue]);
+  const enqueueBatch = useCallback(async (songs: SongReference[]) => {
     const result = await requestRoom<BatchQueueResult>('/queue/add-batch', { method: 'POST', body: JSON.stringify({ songs }) });
     // The mutation result is authoritative even if a later snapshot request fails.
     // WebSocket events already synchronize the queue; never turn an accepted batch into a retry.
-    void syncPlayback().catch(() => {});
+    refreshIfDisconnected();
     return result;
-  };
-  const playlistAction = async (path: string, body: object = {}, method = 'POST') => {
+  }, [requestRoom, refreshIfDisconnected]);
+  const playlistAction = useCallback(async (path: string, body: object = {}, method = 'POST') => {
     await requestRoom('/playlists' + path, { method, body: method === 'DELETE' ? undefined : JSON.stringify(body) });
-    await syncPlayback();
-  };
-  const moveToTop = async (instanceId: number) => {
+    refreshIfDisconnected();
+  }, [requestRoom, refreshIfDisconnected]);
+  const moveToTop = useCallback(async (instanceId: number) => {
     await mutateQueue('moveTop', { instanceId });
-  };
-  const removeFromQueue = async (instanceId: number) => {
+  }, [mutateQueue]);
+  const removeFromQueue = useCallback(async (instanceId: number) => {
     await mutateQueue('remove', { instanceId });
-  };
-  const skipNext = async () => {
+  }, [mutateQueue]);
+  const skipNext = useCallback(async () => {
     await mutateQueue('skipNext', { playbackRevision: serverPlaybackRevision.current });
-  };
-  const setRecommendationMode = async (enabled: boolean, provider: import('@/types/music').MusicProvider = 'netease') => {
+  }, [mutateQueue]);
+  const setRecommendationMode = useCallback(async (enabled: boolean, provider: import('@/types/music').MusicProvider = 'netease') => {
     await mutateQueue('recommendations/' + (enabled ? 'start' : 'stop'), { provider });
-  };
-  const sendChat = (text: string) => {
+  }, [mutateQueue]);
+  const sendChat = useCallback((text: string) => {
     if (!user) throw new Error('请先登录');
     if (connection !== 'connected' || socketRef.current?.readyState !== WebSocket.OPEN) throw new Error('正在重新连接，请稍后发送');
     socketRef.current.send(JSON.stringify({ type: 'chat', roomId, text }));
-  };
-  const leaveRoom = async () => {
+  }, [user, connection, roomId]);
+  const leaveRoom = useCallback(async () => {
     if (closed.current) return;
     try {
       await requestRoom('/leave', { method: 'POST' });
@@ -216,11 +244,14 @@ export function MusicProvider({ children, initialState }: { children: ReactNode;
       throw error;
     }
     exit('已离开房间');
-  };
-  return <MusicContext.Provider value={{ audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision,
+  }, [requestRoom, exit]);
+  const value = useMemo<MusicContextType>(() => ({ audioRef, rhythmReader, currentSong, isPlaying, audioUrl, startTime, playbackRevision,
     connection, queue, recommendations, playlists, messages, onlineUsers, user, room, isHost: Boolean(room?.host && room.host.id === auth.user?.id),
     canControlPlayback: room?.kind === 'super' || Boolean(room?.host && room.host.id === auth.user?.id),
     playlistAction, setPlaybackMode: mode => mutateQueue('mode', { mode }),
     setCurrentSong, setCurrentPosition, setIsPlaying, syncPlayback, skipNext, enqueue, enqueueBatch, moveToTop, removeFromQueue,
-    startRecommendations: provider => setRecommendationMode(true, provider), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }}>{children}</MusicContext.Provider>;
+    startRecommendations: provider => setRecommendationMode(true, provider), stopRecommendations: () => setRecommendationMode(false), sendChat, login: auth.login, leaveRoom, requestRoom }),
+    [currentSong, isPlaying, audioUrl, startTime, playbackRevision, connection, queue, recommendations, playlists, messages, onlineUsers, user, room, auth.user?.id, auth.login,
+      playlistAction, mutateQueue, setCurrentPosition, syncPlayback, skipNext, enqueue, enqueueBatch, moveToTop, removeFromQueue, setRecommendationMode, sendChat, leaveRoom, requestRoom]);
+  return <ProgressContext.Provider value={progress}><MusicContext.Provider value={value}>{children}</MusicContext.Provider></ProgressContext.Provider>;
 }

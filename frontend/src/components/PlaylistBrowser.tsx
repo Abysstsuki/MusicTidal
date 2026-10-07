@@ -16,6 +16,7 @@ import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import { useMusicContext } from '@/contexts/MusicContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { apiRequest, ApiError } from '@/lib/api';
 import type { NeteaseBinding as Binding } from '@/types/room';
@@ -41,6 +42,7 @@ function PageControls({ offset, hasMore, total, change, disabled = false }: { of
 }
 
 function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = true, onBusyChange }: { roomOnly?: boolean; provider?: MusicProvider; visible?: boolean; onBusyChange?: (busy: boolean) => void }) {
+  const { token } = useAuth();
   const { playlists, playlistAction, requestRoom, enqueue, canControlPlayback, syncPlayback, currentSong, room } = useMusicContext();
   const { showToast } = useToast();
   const [binding, setBinding] = useState<Binding | null>(null);
@@ -48,10 +50,13 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
   const [revision, setRevision] = useState(0);
   const [bindingRevision, setBindingRevision] = useState(0);
   const bindingLoaded = useRef(false);
+  const bindingCache = useRef<{ key: string; expires: number; value: Binding } | null>(null);
+  const pages = useRef(new Map<string, { expires: number; value: PlaylistPage<Song> | PlaylistPage<PlaylistSummary> }>());
   const [view, setView] = useState<'mine' | 'search'>('search');
   const [query, setQuery] = useState('');
   const [keyword, setKeyword] = useState('');
   const [selection, setSelection] = useState<Selection | null>(null);
+  const libraryOffset = useRef(0);
   const [offset, setOffset] = useState(0);
   const [list, setList] = useState<PlaylistPage<PlaylistSummary> | null>(null);
   const [tracks, setTracks] = useState<PlaylistPage<Song> | null>(null);
@@ -77,41 +82,54 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
   }, [readerProvider]);
 
   useEffect(() => {
-    if (roomOnly && room?.kind !== 'super') return;
+    if (!visible || (roomOnly && room?.kind !== 'super')) return;
+    const key = token + ':' + readerProvider + ':' + bindingRevision;
+    if (bindingCache.current?.key === key && bindingCache.current.expires > Date.now()) { setBinding(bindingCache.current.value); return; }
     const controller = new AbortController();
-    setBinding(null);
+    if (bindingCache.current?.key !== key) setBinding(null);
     apiRequest<Binding>('/api/user/' + readerProvider, { signal: controller.signal }).then(value => {
-      if (!controller.signal.aborted) { setBinding(value); if (!bindingLoaded.current) { setView(value.status === 'bound' ? 'mine' : 'search'); bindingLoaded.current = true; } }
+      if (!controller.signal.aborted) { bindingCache.current = { key, value, expires: Date.now() + 15000 }; setBinding(value); if (!bindingLoaded.current) { setView(value.status === 'bound' ? 'mine' : 'search'); bindingLoaded.current = true; } }
     }).catch(problem => { if (!controller.signal.aborted) setError((problem as Error).message); });
     return () => controller.abort();
-  }, [roomOnly, room?.kind, readerProvider, bindingRevision]);
+  }, [roomOnly, room?.kind, readerProvider, bindingRevision, visible, token]);
   useEffect(() => {
     if (roomOnly && selection?.entryId && !playlists.entries.some(item => item.entryId === selection.entryId)) {
       setSelection(null); setOffset(0);
     }
   }, [roomOnly, selection, playlists.entries]);
   useEffect(() => {
-    if (!visible || (roomOnly && !selection) || ((!roomOnly || room?.kind === 'super') && binding?.status !== 'bound') || (!roomOnly && !selection && view === 'search' && !keyword)) { setLoading(false); setTracks(null); setList(null); return; }
+    if (!visible) return;
+    if ((roomOnly && !selection) || ((!roomOnly || room?.kind === 'super') && binding?.status !== 'bound') || (!roomOnly && !selection && view === 'search' && !keyword)) { setLoading(false); setTracks(null); setList(null); return; }
     const controller = new AbortController();
     const page = '?offset=' + offset + '&limit=' + PAGE_SIZE;
-    setLoading(true); setError(''); setTracks(null); setList(null);
     const personalBase = '/api/user/' + provider + '/playlists';
     const personalPath = selection ? personalBase + '/' + selection.playlist.id + '/tracks' + page
       : view === 'mine' ? personalBase + page : personalBase + '/search' + page + '&keywords=' + encodeURIComponent(keyword);
+    const roomPath = selection?.entryId ? '/playlists/' + selection.entryId + '/tracks' + page : null;
+    const key = JSON.stringify([token, roomPath || personalPath, bindingRevision, revision, authorizationScope]);
+    const saved = pages.current.get(key);
+    setError('');
+    if (saved) {
+      if (selection) setTracks(saved.value as PlaylistPage<Song>); else setList(saved.value as PlaylistPage<PlaylistSummary>);
+      setLoading(false);
+      if (saved.expires > Date.now()) return;
+    } else { setLoading(true); if (selection) setTracks(null); else setList(null); }
     const work = selection?.entryId
-      ? requestRoom<PlaylistPage<Song>>('/playlists/' + selection.entryId + '/tracks' + page, { signal: controller.signal })
+      ? requestRoom<PlaylistPage<Song>>(roomPath!, { signal: controller.signal })
       : apiRequest<PlaylistPage<Song> | PlaylistPage<PlaylistSummary>>(personalPath, { signal: controller.signal });
     work.then(value => {
       if (controller.signal.aborted) return;
+      if (pages.current.size >= 20) pages.current.delete(pages.current.keys().next().value!);
+      pages.current.set(key, { value, expires: Date.now() + 60000 });
       if (selection) setTracks(value as PlaylistPage<Song>); else setList(value as PlaylistPage<PlaylistSummary>);
     }).catch(problem => {
       if (!controller.signal.aborted) {
         setError((problem as Error).message);
-        if (problem instanceof ApiError && problem.code?.endsWith('BINDING_EXPIRED')) { setBinding(previous => ({ status: 'expired', profile: previous?.profile || null, boundAt: previous?.boundAt || null })); }
+        if (problem instanceof ApiError && problem.code?.endsWith('BINDING_EXPIRED')) { bindingCache.current = null; pages.current.clear(); setBinding(previous => ({ status: 'expired', profile: previous?.profile || null, boundAt: previous?.boundAt || null })); }
       }
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [roomOnly, room?.kind, visible, provider, selection, offset, view, keyword, binding?.status, requestRoom, revision, bindingRevision, authorizationScope]);
+  }, [roomOnly, room?.kind, visible, provider, selection, offset, view, keyword, binding?.status, requestRoom, revision, bindingRevision, authorizationScope, token]);
   const perform = async (work: () => Promise<void>, notice: string) => {
     if (locked) return;
     setBusy(true);
@@ -119,8 +137,8 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
     catch (problem) { if ((problem as Error).name !== 'AbortError') showToast((problem as Error).message, { tone: 'error' }); }
     finally { setBusy(false); }
   };
-  const open = (playlist: PlaylistSummary, entryId?: string) => { if (locked) return; setSelection({ playlist, entryId }); setOffset(0); setError(''); setTracks(null); };
-  const back = () => { if (locked) return; setSelection(null); setOffset(0); setError(''); setList(null); setTracks(null); };
+  const open = (playlist: PlaylistSummary, entryId?: string) => { if (locked) return; libraryOffset.current = offset; setSelection({ playlist, entryId }); setOffset(0); setError(''); setTracks(null); };
+  const back = () => { if (locked) return; setSelection(null); setOffset(libraryOffset.current); setError(''); };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!query.trim()) return; setKeyword(query.trim()); setView('search'); setOffset(0); setRevision(value => value + 1); };
   const added = (id: number) => playlists.entries.some(item => item.id === id && (item.provider || 'netease') === provider);
   const changeOffset = (next: number) => { if (!loading && !locked) setOffset(next); };
@@ -150,8 +168,8 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
         <button className={styles.controlButton} aria-label="管理音乐账号" title="管理音乐账号" onClick={() => setShowBinding(true)}><AccountCircleOutlined fontSize="small" /></button>
       </div>
       <div className={styles.tabs} aria-label="歌单来源">
-        <button className={view === 'mine' ? styles.selected : ''} disabled={binding?.status !== 'bound'} onClick={() => { setView('mine'); setOffset(0); setList(null); }}>我的歌单</button>
-        <button className={view === 'search' ? styles.selected : ''} disabled={binding?.status !== 'bound'} onClick={() => { setView('search'); setOffset(0); setList(null); }}>搜索歌单</button>
+        <button className={view === 'mine' ? styles.selected : ''} disabled={binding?.status !== 'bound'} onClick={() => { setView('mine'); setOffset(0); }}>我的歌单</button>
+        <button className={view === 'search' ? styles.selected : ''} disabled={binding?.status !== 'bound'} onClick={() => { setView('search'); setOffset(0); }}>搜索歌单</button>
       </div>
       {view === 'search' && <form className={styles.search} onSubmit={submit}>
         <input aria-label="搜索歌单" placeholder="搜索歌单名称…" value={query} maxLength={100} onChange={event => setQuery(event.target.value)} />
@@ -212,12 +230,12 @@ function ProviderLibrary({ roomOnly = false, provider = 'netease', visible = tru
     {showBinding && <NeteaseBinding onClose={() => { setShowBinding(false); setBindingRevision(value => value + 1); }} onChanged={async () => { setBindingRevision(value => value + 1); setRevision(value => value + 1); await syncPlayback(); }} />}
   </div>;
 }
-export default function PlaylistBrowser({ roomOnly = false }: { roomOnly?: boolean }) {
+export default function PlaylistBrowser({ roomOnly = false, visible = true }: { roomOnly?: boolean; visible?: boolean }) {
   const [provider, setProvider] = useState<MusicProvider>('netease');
   const [neteaseBusy, setNeteaseBusy] = useState(false);
   const [qqmusicBusy, setQqmusicBusy] = useState(false);
-  if (roomOnly) return <ProviderLibrary roomOnly />;
+  if (roomOnly) return <ProviderLibrary roomOnly visible={visible} />;
   return <div><div className={styles.tabs} role="tablist" aria-label="音乐平台">
     {(['netease','qqmusic'] as const).map(value => <button key={value} role="tab" aria-selected={provider === value} disabled={neteaseBusy || qqmusicBusy} className={provider === value ? styles.selected : ''} onClick={() => setProvider(value)}>{providerName(value)}</button>)}
-  </div>{(['netease','qqmusic'] as const).map(value => <div key={value} role="tabpanel" hidden={provider !== value}><ProviderLibrary provider={value} visible={provider === value} onBusyChange={value === 'netease' ? setNeteaseBusy : setQqmusicBusy} /></div>)}</div>;
+  </div>{(['netease','qqmusic'] as const).map(value => <div key={value} role="tabpanel" hidden={provider !== value}><ProviderLibrary provider={value} visible={visible && provider === value} onBusyChange={value === 'netease' ? setNeteaseBusy : setQqmusicBusy} /></div>)}</div>;
 }

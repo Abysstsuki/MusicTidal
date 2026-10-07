@@ -19,7 +19,7 @@ import type { PlaybackMode } from '@/types/playlist';
 import type { MusicProvider } from '@/types/music';
 import SongBadges from './SongBadges';
 
-export default function MusicQueue() {
+export default function MusicQueue({ isVisible = true }: { isVisible?: boolean }) {
   const { playlists, canControlPlayback, setPlaybackMode, queue, room } = useMusicContext();
   const { showToast } = useToast();
   const [view, setView] = useState<PlaybackMode>(playlists.mode);
@@ -39,7 +39,7 @@ export default function MusicQueue() {
     </div>
     <p className={playlistStyles.modeNote}>{canControlPlayback ? view === 'playlist' && !playlists.activeEntryId ? room?.kind === 'super' ? '点击歌单右侧播放图标启用，所有成员均可操作。' : '进入歌单详情，点击右侧播放图标启用。' : '切换标签可切换房间播放模式，当前歌曲继续播完。' : '标签仅用于浏览，房主控制房间播放模式。'}</p>
     <div role="tabpanel" id="queue-panel-regular" aria-labelledby="queue-tab-regular" hidden={view !== 'regular'}><RegularQueue /></div>
-    <div role="tabpanel" id="queue-panel-playlist" aria-labelledby="queue-tab-playlist" hidden={view !== 'playlist'}><PlaylistBrowser roomOnly /></div>
+    <div role="tabpanel" id="queue-panel-playlist" aria-labelledby="queue-tab-playlist" hidden={view !== 'playlist'}><PlaylistBrowser roomOnly visible={isVisible && view === 'playlist'} /></div>
   </div>;
 }
 

@@ -116,7 +116,7 @@ export const startHeartModeHandler = async (req: Request, res: Response) => {
   if (!state.available) throw new HttpError(403, state.disabledReason!, 'RECOMMENDATIONS_DISABLED');
   const room = roomManager.host(String(req.params.roomId), (req as AuthRequest).user!.userId);
   const provider = musicProvider(req.body?.provider); room.requireProvider(provider);
-  res.json({ success: true, recommendations: await room.queue.startHeartMode(provider) });
+  res.json({ success: true, recommendations: await room.queue.startHeartMode(provider, false) });
 };
 export const stopRecommendationsHandler = (req: Request, res: Response) => {
   const memberRoom = roomFor(req);

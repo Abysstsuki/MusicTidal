@@ -70,6 +70,7 @@ export default function ListeningStage() {
     } catch { showToast('复制失败，请重试', { tone: 'error' }); }
   };
   const [panel, setPanel] = useState<Panel>('chat');
+  const [mountedPanels, setMountedPanels] = useState<Exclude<Panel, null>[]>(['chat']);
   const [showLyrics, setShowLyrics] = useState(true);
   const stageRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -81,6 +82,7 @@ export default function ListeningStage() {
   };
   const togglePanel = (next: Exclude<Panel, null>, trigger: HTMLButtonElement) => {
     triggerRef.current = trigger;
+    setMountedPanels(items => items.includes(next) ? items : [...items, next]);
     setPanel(value => value === next ? null : next);
   };
   useLayoutEffect(() => {
@@ -133,10 +135,10 @@ export default function ListeningStage() {
           </div>
           <div className="header-actions">
             <OnlineUser />
-            <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel">
+            <button className="pill-button request-button" onClick={event => togglePanel('search', event.currentTarget)} aria-expanded={panel === 'search'} aria-controls="stage-panel-search">
               <MusicNoteRounded fontSize="small" /><span>点歌</span>
             </button>
-            <button className="pill-button request-button" aria-label="歌单" title="音乐歌单" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
+            <button className="pill-button request-button" aria-label="歌单" title="音乐歌单" onClick={event => togglePanel('playlist', event.currentTarget)} aria-expanded={panel === 'playlist'} aria-controls="stage-panel-playlist"><QueueMusicRounded fontSize="small" /><span>歌单</span></button>
             <UserInfo />
           </div>
         </header>
@@ -159,26 +161,26 @@ export default function ListeningStage() {
       {showLyrics && <MusicLyrics />}
 
       <nav className="stage-tools" aria-label="听歌互动">
-        <button className={'pill-button chat-launch ' + (panel === 'chat' ? 'is-active' : '')} onClick={event => togglePanel('chat', event.currentTarget)} aria-expanded={panel === 'chat'} aria-controls="stage-panel">
+        <button className={'pill-button chat-launch ' + (panel === 'chat' ? 'is-active' : '')} onClick={event => togglePanel('chat', event.currentTarget)} aria-expanded={panel === 'chat'} aria-controls="stage-panel-chat">
           <ChatBubbleOutlineRounded fontSize="small" /><span>聊天</span>
         </button>
-        <button className={'pill-button ' + (panel === 'queue' ? 'is-active' : '')} onClick={event => togglePanel('queue', event.currentTarget)} aria-expanded={panel === 'queue'} aria-controls="stage-panel">
+        <button className={'pill-button ' + (panel === 'queue' ? 'is-active' : '')} onClick={event => togglePanel('queue', event.currentTarget)} aria-expanded={panel === 'queue'} aria-controls="stage-panel-queue">
           <QueueMusicRounded fontSize="small" /><span>待播</span><span className="queue-count">{String(queue.length).padStart(2, '0')}</span>
         </button>
       </nav>
 
-      {panel && (
-        <aside id="stage-panel" className={'stage-popover popover-' + panel} ref={panelRef} aria-label={panel === 'playlist' ? '音乐歌单' : panel === 'search' ? '搜索与点歌' : panel === 'queue' ? '待播队列' : '聊天'}>
+      {mountedPanels.map(item => (
+        <aside key={item} id={'stage-panel-' + item} hidden={panel !== item} style={panel !== item ? { display: 'none' } : undefined} className={'stage-popover popover-' + item} ref={panel === item ? panelRef : undefined} aria-label={item === 'playlist' ? '音乐歌单' : item === 'search' ? '搜索与点歌' : item === 'queue' ? '待播队列' : '聊天'}>
           <div className="popover-heading">
-            <h2>{panel === 'playlist' ? <><QueueMusicRounded />音乐歌单</> : panel === 'search' ? <><MusicNoteRounded />点歌</> : panel === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
+            <h2>{item === 'playlist' ? <><QueueMusicRounded />音乐歌单</> : item === 'search' ? <><MusicNoteRounded />点歌</> : item === 'queue' ? <><QueueMusicRounded />待播队列 <span>{queue.length}</span></> : <><ChatBubbleOutlineRounded />聊天</>}</h2>
             <button className="icon-button" data-close-panel aria-label="关闭面板" title="关闭面板" onClick={closePanel}><CloseRounded /></button>
           </div>
-          {panel === 'chat' && <ChatBox />}
-          {panel === 'queue' && <MusicQueue />}
-          {panel === 'search' && <MusicReq isVisible />}
-          {panel === 'playlist' && <div className="search-content"><PlaylistBrowser /></div>}
+          {item === 'chat' && <ChatBox />}
+          {item === 'queue' && <MusicQueue isVisible={panel === item} />}
+          {item === 'search' && <MusicReq isVisible={panel === item} />}
+          {item === 'playlist' && <div className="search-content"><PlaylistBrowser visible={panel === item} /></div>}
         </aside>
-      )}
+      ))}
 
       <MusicPlayer showLyrics={showLyrics} onToggleLyrics={() => setShowLyrics(value => !value)} />
       {showLeave && <LeaveRoomDialog name={room?.name || '当前房间'} isHost={isHost} graceMs={room?.hostGracePeriodMs} busy={leaving} error={leaveError} onClose={() => setShowLeave(false)} onConfirm={() => void leave()} />}

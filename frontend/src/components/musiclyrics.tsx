@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Noto_Sans_SC } from 'next/font/google';
-import { useMusicContext } from '@/contexts/MusicContext';
+import { useMusicContext, usePlaybackPosition } from '@/contexts/MusicContext';
 import { useToastMessage } from '@/contexts/ToastContext';
 import CurvedLyrics from '@/components/curvedlyrics';
 
@@ -31,7 +31,8 @@ export function parseLyric(lyric: string): LyricLine[] {
 }
 
 export default function MusicLyrics() {
-  const { currentSong, currentPosition, requestRoom } = useMusicContext();
+  const { currentSong, requestRoom } = useMusicContext();
+  const currentPosition = usePlaybackPosition();
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [translations, setTranslations] = useState<LyricLine[]>([]);
   const [loading, setLoading] = useState(false);

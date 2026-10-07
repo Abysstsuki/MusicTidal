@@ -78,7 +78,7 @@ export class Room {
           const raw = data?.songs?.find((song: any) => Number(song.id) === candidate.songId);
           return raw ? neteaseSong(raw, data.privileges?.find((song: any) => Number(song.id) === candidate.songId)) : undefined;
         }
-        await catalog.index(candidate.userId, candidate.playlistId);
+        await catalog.assertAccess(candidate.userId, candidate.playlistId);
         return (await catalog.songs(candidate.userId, [candidate.songId]))[0];
       },
       emit: event => this.broadcast(event.type, event.payload),
@@ -216,9 +216,11 @@ export class RoomManager {
     this.ensureAvailable(user.id);
     if (typeof name !== 'string' || !name.trim() || name.trim().length > 60) throw new HttpError(400, '房间名称需要 1–60 个字符');
     if (password !== undefined && (typeof password !== 'string' || Buffer.byteLength(password) > 72)) throw new HttpError(400, '密码过长');
-    const hash = password ? await bcrypt.hash(password as string, 10) : null;
-    const credential = await this.credentials(user.id);
-    const qqCredential = this.qq ? await this.qq.credentials(user.id) : null;
+    const [hash, credential, qqCredential] = await Promise.all([
+      password ? bcrypt.hash(password as string, 10) : Promise.resolve(null),
+      this.credentials(user.id),
+      this.qq ? this.qq.credentials(user.id) : Promise.resolve(null),
+    ]);
     this.ensureAvailable(user.id);
     const room = new Room(randomUUID(), name.trim(), user, hash);
     this.rooms.set(room.id, room);

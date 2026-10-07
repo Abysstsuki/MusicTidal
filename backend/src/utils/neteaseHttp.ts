@@ -24,10 +24,11 @@ const modules: Record<string, NeteaseModule> = {
   '/playlist/detail': netease.playlist_detail,
   '/song/detail': netease.song_detail,
 };
-const cacheableEndpoints = new Set(['/cloudsearch', '/lyric']);
+const cacheableEndpoints = new Set(['/cloudsearch', '/lyric', '/song/detail']);
 const cacheTtl = 120_000;
 const cacheLimit = 100;
 const cache = new Map<string, { expires: number; data: any }>();
+const songDetails = new Map<string, { expires: number; song: any; privilege: any }>();
 const pending = new Map<string, Promise<{ data: any }>>();
 const invalidatedTasks = new WeakSet<Promise<{ data: any }>>();
 let guestToken = '';
@@ -111,6 +112,21 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
   const canCache = cacheableEndpoints.has(pathname) && params.timestamp === undefined;
   const identity = crypto.createHash('sha256').update(cookie + '\0' + anonymousToken).digest('hex');
   const cacheKey = JSON.stringify([pathname, identity, realIP, Object.keys(params).sort().map(key => [key, params[key]])]);
+  const ids = canCache && pathname === '/song/detail' && /^\d+(,\d+)*$/.test(String(params.ids || ''))
+    ? [...new Set(String(params.ids).split(',').map(Number))] : [];
+  const detailKey = (id: number) => JSON.stringify([identity, realIP, id]);
+  const existing = new Map<number, { expires: number; song: any; privilege: any }>();
+  for (const id of ids) {
+    const key = detailKey(id), found = songDetails.get(key);
+    if (found && found.expires > Date.now()) existing.set(id, found);
+    else songDetails.delete(key);
+  }
+  const detailBody = (body: any) => ({ ...body,
+    songs: ids.flatMap(id => existing.has(id) ? [existing.get(id)!.song] : []),
+    privileges: ids.flatMap(id => existing.get(id)?.privilege ? [existing.get(id)!.privilege] : []),
+  });
+  if (ids.length && existing.size === ids.length) return { data: detailBody({ code: 200 }) };
+  const requestParams = ids.length ? { ...params, ids: ids.filter(id => !existing.has(id)).join(',') } : params;
 
   if (canCache) {
     const saved = cache.get(cacheKey);
@@ -124,13 +140,27 @@ async function get(cookie: string, onExpired: (() => void) | undefined, pathname
   task = (async () => {
     try {
       // Modules receive fresh cookie objects; their os/appver mutations stay local.
-      const response = await module({ ...params, cookie, realIP, anonymousToken, timeout: 15000 });
+      const response = await module({ ...requestParams, cookie, realIP, anonymousToken, timeout: 15000 });
       if (response.body?.code === 301 || response.body?.code === 401 ||
           (cookie && pathname === '/user/account' && response.body?.code === 200 && !response.body?.profile)) {
         onExpired?.();
         throw new NeteaseApiError(401);
       }
-      if (canCache && response.body?.code === 200 && isActive() && !invalidatedTasks.has(task)) {
+      const canStore = canCache && response.body?.code === 200 && isActive() && !invalidatedTasks.has(task);
+      if (ids.length && response.body?.code === 200 && Array.isArray(response.body.songs)) {
+        const privileges = new Map((response.body.privileges || []).map((item: any) => [Number(item.id), item]));
+        for (const song of response.body.songs) {
+          const id = Number(song.id), value = { expires: Date.now() + cacheTtl, song, privilege: privileges.get(id) };
+          if (!ids.includes(id)) continue;
+          existing.set(id, value);
+          if (canStore) {
+            if (songDetails.size >= 1000) songDetails.delete(songDetails.keys().next().value!);
+            songDetails.set(detailKey(id), value);
+          }
+        }
+        // Also assemble partial batches for a live caller sharing a disposed client's request.
+        response.body = detailBody(response.body);
+      } else if (canStore && pathname !== '/song/detail') {
         if (cache.size >= cacheLimit) cache.delete(cache.keys().next().value!);
         cache.set(cacheKey, { expires: Date.now() + cacheTtl, data: response.body });
       }
@@ -168,6 +198,7 @@ export function createNeteaseClient(cookie: string, onExpired?: () => void): Net
     if (clearCache && cookie) {
       const identity = crypto.createHash('sha256').update(cookie + '\0').digest('hex');
       for (const key of cache.keys()) if (JSON.parse(key)[1] === identity) cache.delete(key);
+      for (const key of songDetails.keys()) if (JSON.parse(key)[0] === identity) songDetails.delete(key);
       for (const [key, task] of pending) if (JSON.parse(key)[1] === identity) { invalidatedTasks.add(task); pending.delete(key); }
     }
   } };

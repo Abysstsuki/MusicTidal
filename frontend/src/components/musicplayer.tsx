@@ -12,7 +12,7 @@ import FullscreenRounded from '@mui/icons-material/FullscreenRounded';
 import FullscreenExitRounded from '@mui/icons-material/FullscreenExitRounded';
 import VolumeUpRounded from '@mui/icons-material/VolumeUpRounded';
 import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
-import { useMusicContext } from '@/contexts/MusicContext';
+import { useMusicContext, usePlaybackPosition } from '@/contexts/MusicContext';
 import { useToast, useToastMessage } from '@/contexts/ToastContext';
 import SongCover from '@/components/modelItem/SongCover';
 import PlayerGlass from '@/components/playerglass';
@@ -40,7 +40,8 @@ function readVolumePreference(userId?: number): VolumePreference {
 
 export default function MusicPlayer({ showLyrics, onToggleLyrics }: { showLyrics: boolean; onToggleLyrics: () => void }) {
   const { showToast } = useToast();
-  const { user, audioRef, rhythmReader, currentSong, currentPosition, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const { user, audioRef, rhythmReader, currentSong, isPlaying, audioUrl, startTime, playbackRevision, connection, setCurrentPosition, setIsPlaying, syncPlayback, skipNext } = useMusicContext();
+  const currentPosition = usePlaybackPosition();
   const userId = user?.id;
   const [volumePreference, setVolumePreference] = useState(() => readVolumePreference(userId));
   const volume = volumePreference.volume;
